@@ -152,15 +152,22 @@ class ReadOnlyFatFs {
     if(!write_ok||sync_rc!=FR_OK||close_rc!=FR_OK) return false;
     file.reset(new (std::nothrow) FIL{});
     if (!file) return false;
-    ESP_LOGI("atilla_storage", "SERVICE 5/8 reopen and verify 8 x 512 byte reads");
+    ESP_LOGI("atilla_storage", "SERVICE 5/8 reopening existing file (before f_open)");
+    const uint32_t reopen_started=millis();
     rc = f_open(file.get(),filename,FA_READ);
+    ESP_LOGI("atilla_storage", "SERVICE f_open(read)=%u elapsed=%" PRIu32 "ms stack_min_free=%u",
+             unsigned(rc),uint32_t(millis()-reopen_started),unsigned(uxTaskGetStackHighWaterMark(nullptr)));
     if(rc!=FR_OK) return false;
     const bool right_size = f_size(file.get())==4096;
     uint32_t actual_crc=0xffffffffU;
     bool read_ok=right_size;
     for(unsigned block=0;block<8&&read_ok;++block) {
       UINT got=0;
+      ESP_LOGI("atilla_storage", "SERVICE read block=%u start",block);
+      const uint32_t read_started=millis();
       const FRESULT rd=f_read(file.get(),buffer.get(),512,&got);
+      ESP_LOGI("atilla_storage", "SERVICE read block=%u rc=%u got=%u elapsed=%" PRIu32 "ms",
+               block,unsigned(rd),unsigned(got),uint32_t(millis()-read_started));
       if(rd!=FR_OK||got!=512){read_ok=false;break;}
       for(unsigned i=0;i<512;++i) {
         actual_crc ^= buffer[i];
