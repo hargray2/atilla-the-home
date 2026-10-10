@@ -132,6 +132,7 @@ class AtillaStorage : public Component {
     idle_ = idle;
   }
   void set_fatfs_mount_test(bool enabled) { fatfs_mount_test_ = enabled; }
+  void set_fatfs_file_read_test(bool enabled) { fatfs_file_read_test_ = enabled; }
   void setup() override {
     start_ms_ = millis();
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
@@ -240,12 +241,19 @@ class AtillaStorage : public Component {
       return;
     }
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
-    uint32_t crc = 0, size = 0;
-    if (fatfs.read_known_file(crc, size)) {
-      ESP_LOGI("atilla_storage", "FATFS FILE READ: bytes=%" PRIu32 " CRC32=%08" PRIX32,
-               size, crc);
+    // CRASH ISOLATION: the previous on-device run disconnected immediately
+    // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
+    if (fatfs_file_read_test_) {
+      ESP_LOGW("atilla_storage", "EXPERIMENTAL FATFS f_open/f_read requested");
+      uint32_t crc = 0, size = 0;
+      if (fatfs.read_known_file(crc, size)) {
+        ESP_LOGI("atilla_storage", "FATFS FILE READ: bytes=%" PRIu32 " CRC32=%08" PRIX32,
+                 size, crc);
+      } else {
+        ESP_LOGW("atilla_storage", "FATFS FILE OPEN/READ FAILED");
+      }
     } else {
-      ESP_LOGW("atilla_storage", "FATFS FILE OPEN/READ FAILED");
+      ESP_LOGI("atilla_storage", "FATFS file open/read SKIPPED (crash isolation)");
     }
     fatfs.unmount();
     ESP_LOGI("atilla_storage", "FATFS unmounted");
@@ -259,6 +267,7 @@ class AtillaStorage : public Component {
   uint32_t start_ms_{0};
   bool attempted_{false};
   bool fatfs_mount_test_{false};
+  bool fatfs_file_read_test_{false};
 };
 } // namespace esphome::atilla_storage
 
