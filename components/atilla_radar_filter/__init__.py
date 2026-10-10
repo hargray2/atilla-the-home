@@ -5,7 +5,10 @@ from esphome import automation
 from esphome.components.online_image.image import OnlineImage
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["online_image"]
+# `online_image` is now an `image:` platform in ESPHome 2026.9.1.
+# A DEPENDENCIES entry requires a top-level `online_image:` block and fails
+# when only modern `image: - platform: online_image` entries are configured.
+# The typed cv.use_id(OnlineImage) validator still requires a real image ID.
 AUTO_LOAD = ["image", "runtime_image"]
 
 ns = cg.esphome_ns.namespace("atilla_radar_filter")
