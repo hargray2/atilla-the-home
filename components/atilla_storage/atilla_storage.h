@@ -30,7 +30,7 @@ class ReadOnlySD {
     card_=wrap(card); idle_=wrap(idle);
   }
   bool begin() {
-    initialized_=false;
+    initialized_=false; capacity_verified_=false; writes_allowed_=false; card_sectors_=0;
     if (!card_.ptr || !idle_.ptr) return false;
     idle_.select();
     for (int i=0;i<12;i++) idle_.tx(0xff);
@@ -87,6 +87,62 @@ class ReadOnlySD {
   uint64_t physical_sector_limit() const {
     return uint64_t(partition_start_) + partition_sectors_;
   }
+  // SDHC CSD v2 card capacity: verified independently of FAT partition fields.
+  bool verify_physical_capacity() {
+    if (!initialized_) return false;
+    uint8_t csd[16] = {};
+    card_.select();
+    bool ok = command_(9, 0, 0x01) == 0;
+    if (ok) {
+      uint8_t token = 0xff;
+      for (int i=0;i<16000;i++) {
+        token=card_.tx(0xff);
+        if(token!=0xff)break;
+      }
+      ok=(token==0xfe);
+      if(ok) {
+        for(auto &b : csd)b=card_.tx(0xff);
+        card_.tx(0xff);card_.tx(0xff);
+      }
+    }
+    card_.deselect();
+    if(!ok || (csd[0] >> 6)!=1) return false;
+    const uint32_t c_size = (uint32_t(csd[7] & 0x3f) << 16) |
+                            (uint32_t(csd[8]) << 8) | csd[9];
+    card_sectors_ = (uint64_t(c_size)+1ULL)*1024ULL;
+    capacity_verified_ = (physical_sector_limit() <= card_sectors_) &&
+                         card_sectors_ <= uint64_t(UINT32_MAX);
+    ESP_LOGI("atilla_storage", "SD CSD verified capacity sectors=%" PRIu64
+             " partition_end=%" PRIu64 " status=%s", card_sectors_,
+             physical_sector_limit(), capacity_verified_ ? "PASS" : "FAIL");
+    return capacity_verified_;
+  }
+  bool enable_test_writes() {
+    writes_allowed_ = initialized_ && capacity_verified_;
+    return writes_allowed_;
+  }
+  void disable_test_writes() { writes_allowed_ = false; }
+  bool write_physical_sector(uint32_t lba, const uint8_t *in) {
+    if (!writes_allowed_ || !initialized_ || !capacity_verified_ || !in ||
+        uint64_t(lba)<partition_start_ || uint64_t(lba)>=physical_sector_limit() ||
+        uint64_t(lba)>=card_sectors_) return false;
+    card_.select();
+    bool ok=command_(24,lba,0x01)==0;
+    if(ok) {
+      card_.tx(0xff); card_.tx(0xfe);
+      for(unsigned i=0;i<512;i++) card_.tx(in[i]);
+      card_.tx(0xff);card_.tx(0xff);
+      const uint8_t response=card_.tx(0xff);
+      ok=(response & 0x1f)==0x05;
+      if(ok) {
+        bool ready=false;
+        for(unsigned i=0;i<200000;i++) if(card_.tx(0xff)==0xff){ready=true;break;}
+        ok=ready;
+      }
+    }
+    card_.deselect();
+    return ok;
+  }
   uint32_t partition_start() const {return partition_start_;}
   uint32_t partition_sectors() const {return partition_sectors_;}
   bool initialized() const {return initialized_;}
@@ -94,6 +150,9 @@ class ReadOnlySD {
  private:
   Bus card_,idle_;
   bool initialized_{false};
+  bool capacity_verified_{false};
+  bool writes_allowed_{false};
+  uint64_t card_sectors_{0};
   uint32_t partition_start_{0},partition_sectors_{0};
   static bool signature_(const uint8_t *p) {return p[510]==0x55 && p[511]==0xAA;}
   static uint32_t le32_(const uint8_t *p) {
