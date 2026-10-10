@@ -48,3 +48,17 @@ The directory entry `SYSTEM~1` was encountered at root. In its subdirectory, `WP
 3. Keep formatting disabled; no `f_mkfs`.
 4. Resolve SPI contention, timeout, scheduling and stack/RAM concerns.
 5. Only then implement bounded writes and a controlled test-file create/read-back.
+
+## ATILLA 4.6 GitHub component on-device confirmation (2026-10-09)
+
+The user installed the external-component firmware successfully and supplied ESPHome runtime logs confirming the *new* `atilla_storage` code path:
+
+```text
+[I][atilla_storage:071]: SDHC/FAT32 read-only init: PASS
+[I][atilla_storage:146]: READ ONLY OK partition_start=32768 sectors=125009920 bytes_per_sector=512 sectors_per_cluster=64
+[W][component:419]: atilla_storage took a long time for an operation (144 ms), max is 50 ms
+```
+
+The separate legacy YAML read-only diagnostic also succeeded and read the known file `WPSETT~1.DAT` (12 bytes, CRC32 `630105D1`). This distinction matters: the **GitHub driver** currently checks card init, MBR, and FAT32 boot-sector geometry, while the **legacy YAML** reads directory entries and actual file data.
+
+The same boot completed radar tile retrieval and reported approximately **4,763 kB free PSRAM**, around 99 kB free internal heap and 31 kB largest internal heap block. These observations support a working boot, not FATFS mount or write capability. The new driver remains read-only and does not expose a filesystem API.
