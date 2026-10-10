@@ -21,4 +21,4 @@
 
 ## Current code
 
-`experimental/atilla_storage_41.h` is a historical experimental read-only prototype. It has NOT been compiled and should not be treated as a tested driver. Its use of ESP-IDF FatFs registration and CH422G chip select needs compatibility validation.
+`components/atilla_storage/atilla_storage.h` contains the currently committed experimental read-only SPI transport and compile-only ESPHome wrapper. The previous historical `atilla_storage_41.h` concept was never published to this repository. No ESP-IDF FATFS adapter or mount has been implemented here; compilation and on-device tests remain pending.
