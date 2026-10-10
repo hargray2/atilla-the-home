@@ -17,9 +17,12 @@ CONF_CARD_DEVICE = "card_device"
 CONF_IDLE_DEVICE = "idle_device"
 CONF_FATFS_MOUNT_TEST = "fatfs_mount_test"
 CONF_FATFS_FILE_READ_TEST = "fatfs_file_read_test"
+CONF_FATFS_ENTRY_PROBE = "fatfs_entry_probe"
 
 def validate_fatfs_test_flags(config):
-    if config[CONF_FATFS_FILE_READ_TEST] and not config[CONF_FATFS_MOUNT_TEST]:
+    if config[CONF_FATFS_ENTRY_PROBE] and config[CONF_FATFS_FILE_READ_TEST]:
+        raise cv.Invalid("fatfs_entry_probe and fatfs_file_read_test are mutually exclusive")
+    if (config[CONF_FATFS_FILE_READ_TEST] or config[CONF_FATFS_ENTRY_PROBE]) and not config[CONF_FATFS_MOUNT_TEST]:
         raise cv.Invalid("fatfs_file_read_test requires fatfs_mount_test: true")
     return config
 
@@ -30,6 +33,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Required(CONF_IDLE_DEVICE): cv.use_id(spi_device.spi_device),
     cv.Optional(CONF_FATFS_MOUNT_TEST, default=False): cv.boolean,
     cv.Optional(CONF_FATFS_FILE_READ_TEST, default=False): cv.boolean,
+    cv.Optional(CONF_FATFS_ENTRY_PROBE, default=False): cv.boolean,
 }).extend(cv.COMPONENT_SCHEMA), validate_fatfs_test_flags)
 
 async def to_code(config):
@@ -43,3 +47,4 @@ async def to_code(config):
     cg.add(var.set_devices(card, idle))
     cg.add(var.set_fatfs_mount_test(config[CONF_FATFS_MOUNT_TEST]))
     cg.add(var.set_fatfs_file_read_test(config[CONF_FATFS_FILE_READ_TEST]))
+    cg.add(var.set_fatfs_entry_probe(config[CONF_FATFS_ENTRY_PROBE]))
