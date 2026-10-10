@@ -46,3 +46,9 @@ However, fatfs component(s) is not in the requirements list of "src".
 ```
 
 This is not a missing file in the ESP-IDF SDK: the generated ESPHome `src` CMake component does not currently declare the native ESP-IDF `fatfs` requirement. A correct integration needs to add that dependency through supported ESPHome build generation rather than simply copying headers or modifying private YAML. **Do not merge to `main` or ask for an OTA install until this build gate passes.**
+
+## Read-only FATFS optional hardware gate
+
+The earlier automated compilation failed because the ESPHome 2026.9.1 native ESP-IDF build had excluded the `fatfs` component. Calling `esp32.include_builtin_idf_component("fatfs")` and `esp32.require_fatfs()` in the external component fixed this dependency. [GitHub Actions run 38019567042](https://github.com/hargray2/atilla-the-home/actions/runs/38019567042) **passed**.
+
+The development branch now exposes `fatfs_mount_test: true` under `atilla_storage:` (default: false). When enabled, the existing delayed SD sector/CRC diagnostics run first, then a temporary read-only FATFS mount attempts to open the 12-byte known file; the volume is unmounted before returning. All disk write callbacks return `RES_WRPRT`, status reports `STA_PROTECT`, and there is no `f_mkfs` call. This specific mount pathway is **NOT hardware-verified**. The smoke test YAML deliberately uses fake native GPIO CS pins for compile testing only and must never be installed on the actual Waveshare board. Do not merge to main or install on ATILLA until the updated opt-in build has compiled successfully and the user explicitly chooses a test release.
