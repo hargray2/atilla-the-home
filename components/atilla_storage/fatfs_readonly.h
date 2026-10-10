@@ -96,6 +96,81 @@ class ReadOnlyFatFs {
              unsigned(close_rc));
     return close_rc == FR_OK;
   }
+  bool run_settings_persistence_probe() {
+    // Non-destructive persistence probe: never overwrites or deletes preexisting data.
+    if (!mounted_ || !sd_.verify_physical_capacity()) return false;
+    char dir[32], name[48];
+    std::snprintf(dir,sizeof(dir),"%s/ATILLA",drive_path_);
+    std::snprintf(name,sizeof(name),"%s/ATILLA/SETT01.TST",drive_path_);
+    auto info=std::unique_ptr<FILINFO>(new(std::nothrow) FILINFO{});
+    auto file=std::unique_ptr<FIL>(new(std::nothrow) FIL{});
+    if(!info || !file) return false;
+    FRESULT rc=f_stat(dir,info.get());
+    if(rc!=FR_OK || !(info->fattrib & AM_DIR)) {
+      ESP_LOGE("atilla_storage","SETTINGS missing /ATILLA directory rc=%u",unsigned(rc));
+      return false;
+    }
+    // A deterministic, fixed-width record. CRC detects torn/corrupt writes.
+    uint8_t record[32]={};
+    const char magic[8]={'A','T','I','L','L','A','S','1'};
+    std::memcpy(record,magic,8);
+    record[8]=1; // record schema
+    record[9]=25; // SAMPLE ambient brightness; never applied to display
+    record[10]=2; // SAMPLE dim-after minutes
+    record[11]=5; // SAMPLE screen-off minutes
+    for(unsigned i=12;i<28;++i) record[i]=uint8_t(i*7U+3U);
+    uint32_t crc=0xffffffffU;
+    for(unsigned i=0;i<28;++i) {
+      crc^=record[i];
+      for(unsigned bit=0;bit<8;++bit)
+        crc=(crc>>1)^((crc&1U)?0xedb88320U:0U);
+    }
+    crc^=0xffffffffU;
+    for(unsigned i=0;i<4;++i)record[28+i]=uint8_t(crc>>(i*8));
+    rc=f_stat(name,info.get());
+    if(rc==FR_OK) {
+      ESP_LOGI("atilla_storage","SETTINGS existing record found, checking persisted data without writing");
+      if(info->fsize!=32 || (info->fattrib & AM_DIR)) return false;
+      const FRESULT op=f_open(file.get(),name,FA_READ);
+      if(op!=FR_OK)return false;
+      uint8_t saved[32]={};
+      UINT got=0;
+      const FRESULT rd=f_read(file.get(),saved,32,&got);
+      const FRESULT cl=f_close(file.get());
+      const bool match=rd==FR_OK && cl==FR_OK && got==32 && std::memcmp(saved,record,32)==0;
+      ESP_LOGI("atilla_storage","SETTINGS PERSISTENCE %s (existing record across boot; read-only)",
+               match?"PASS":"FAIL");
+      return match;
+    }
+    if(rc!=FR_NO_FILE) {
+      ESP_LOGE("atilla_storage","SETTINGS unexpected f_stat=%u; refusing write",unsigned(rc));
+      return false;
+    }
+    if(!sd_.enable_test_writes())return false;
+    writes_active_=true;
+    ESP_LOGI("atilla_storage","SETTINGS creating new immutable sample record");
+    rc=f_open(file.get(),name,FA_WRITE|FA_CREATE_NEW);
+    if(rc!=FR_OK)return false;
+    UINT written=0;
+    const FRESULT wr=f_write(file.get(),record,32,&written);
+    const FRESULT sync=wr==FR_OK && written==32?f_sync(file.get()):FR_DISK_ERR;
+    const FRESULT cl=f_close(file.get());
+    ESP_LOGI("atilla_storage","SETTINGS write=%u written=%u sync=%u close=%u",
+             unsigned(wr),unsigned(written),unsigned(sync),unsigned(cl));
+    if(wr!=FR_OK || written!=32 || sync!=FR_OK || cl!=FR_OK)return false;
+    file.reset(new(std::nothrow) FIL{});
+    if(!file)return false;
+    rc=f_open(file.get(),name,FA_READ);
+    if(rc!=FR_OK)return false;
+    uint8_t saved[32]={};
+    UINT got=0;
+    const FRESULT rd=f_read(file.get(),saved,32,&got);
+    const FRESULT closed=f_close(file.get());
+    const bool match=rd==FR_OK && got==32 && closed==FR_OK && std::memcmp(saved,record,32)==0;
+    ESP_LOGI("atilla_storage","SETTINGS PERSISTENCE %s (first write + immediate readback, retains SETT01.TST)",
+             match?"PASS":"FAIL");
+    return match;
+  }
   bool run_repeated_write_test() {
     // Three distinct 512-byte files. Never overwrite or delete any pre-existing file.
     if (!mounted_ || !sd_.verify_physical_capacity()) return false;
