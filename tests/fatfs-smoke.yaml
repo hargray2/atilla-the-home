@@ -1,0 +1,37 @@
+esphome:
+  name: atilla-fatfs-smoke
+  friendly_name: ATILLA FATFS Compiler Smoke Test
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+spi:
+  id: sd_bus
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  miso_pin: GPIO13
+
+spi_device:
+  - id: atilla_sd_probe_device
+    spi_id: sd_bus
+    cs_pin: GPIO10
+    data_rate: 200kHz
+  - id: atilla_sd_idle_clocks
+    spi_id: sd_bus
+    cs_pin: GPIO14
+    data_rate: 200kHz
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [atilla_storage]
+
+atilla_storage:
+  id: atilla_storage_46
+  card_device: atilla_sd_probe_device
+  idle_device: atilla_sd_idle_clocks
