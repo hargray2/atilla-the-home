@@ -118,6 +118,7 @@ class ReadOnlySD {
 };
 } // namespace esphome::atilla_storage
 
+#include "fatfs_readonly.h"
 // ESPHome codegen integration: one delayed, read-only probe per boot.
 // In particular this does NOT mount FATFS or expose a write method.
 #include "esphome/core/component.h"
@@ -130,6 +131,7 @@ class AtillaStorage : public Component {
     card_ = card;
     idle_ = idle;
   }
+  void set_fatfs_mount_test(bool enabled) { fatfs_mount_test_ = enabled; }
   void setup() override {
     start_ms_ = millis();
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
@@ -228,6 +230,25 @@ class AtillaStorage : public Component {
       ESP_LOGI("atilla_storage", "FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=%08" PRIX32, crc);
     else
       ESP_LOGW("atilla_storage", "FILE CHECK CRC MISMATCH: got=%08" PRIX32 " expected=630105D1", crc);
+    if (fatfs_mount_test_) this->run_fatfs_test_(sd);
+  }
+  void run_fatfs_test_(ReadOnlySD &sd) {
+    ESP_LOGI("atilla_storage", "Opt-in FATFS read-only mount starting (NO WRITES)");
+    experimental::ReadOnlyFatFs fatfs(sd);
+    if (!fatfs.mount()) {
+      ESP_LOGW("atilla_storage", "FATFS MOUNT FAILED; no filesystem modifications attempted");
+      return;
+    }
+    ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
+    uint32_t crc = 0, size = 0;
+    if (fatfs.read_known_file(crc, size)) {
+      ESP_LOGI("atilla_storage", "FATFS FILE READ: bytes=%" PRIu32 " CRC32=%08" PRIX32,
+               size, crc);
+    } else {
+      ESP_LOGW("atilla_storage", "FATFS FILE OPEN/READ FAILED");
+    }
+    fatfs.unmount();
+    ESP_LOGI("atilla_storage", "FATFS unmounted");
   }
   void dump_config() override {
     ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
@@ -237,9 +258,7 @@ class AtillaStorage : public Component {
   spi_device::SPIDeviceComponent *idle_{nullptr};
   uint32_t start_ms_{0};
   bool attempted_{false};
+  bool fatfs_mount_test_{false};
 };
 } // namespace esphome::atilla_storage
 
-// DEV BRANCH ONLY: parse and compile the FatFs adapter without constructing
-// an adapter, registering disk I/O, mounting a volume, or reading the card.
-#include "fatfs_readonly.h"
