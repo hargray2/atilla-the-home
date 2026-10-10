@@ -49,3 +49,11 @@ A more aggressive FAT32 directory scan in the 4.0.3 experiment was followed by r
 ## Reporting future errors
 
 Record ESPHome version, current Git commit or tag, first meaningful compiler error (not only Ninja's final failure), and whether Validate, Compile, or OTA Install failed. **Redact secrets, API keys, Wi-Fi credentials, access tokens, private IP information if sensitive, and query parameters from map URLs.**
+
+## 2026-10-10 — radar startup stall and duplicate SD work (4.6.4 private candidate)
+
+Real ATILLA logs show synchronous `fetch_rainviewer_radar` callbacks blocking the ESPHome main loop for ~0.8–6.4 seconds; a weather request also blocked ~5.4 seconds. `online_image.image` PNG decoding takes ~0.2–0.6 seconds. These are separate from the brief horizontal RGB glitches, which the user reports disappeared after setting `mipi_rgb.pclk_frequency: 14MHz`.
+
+The existing private full YAML runs **two independent startup FAT32 readers**: a legacy single-YAML `esphome.on_boot` action at priority -200 (322 ms blocking in the supplied logs), plus the new GitHub `atilla_storage` FATFS mount-only component (419 ms). Both verify the same file CRC32. An optional private **4.6.4 minimal-risk candidate** removes the entire priority -200 legacy one-file FAT32 scan while preserving the GitHub driver, FATFS read-only mount/unmount, the display's 14 MHz clock, six map and six radar tiles, all scheduling and user interface functions. No private YAML or coordinates/secrets are committed. YAML was parsed structurally; ESPHome compiler validation and the physical-device regression test are still required.
+
+**This eliminates duplicate startup SD work; it does NOT fix the multi-second network stalls.** That requires separately investigating ESPHome synchronous `http_request` / `online_image.set_url` and avoiding increased overlap, with a dedicated async strategy if supported. Current roughly 4-second radar pacing is intentionally preserved because earlier tighter pacing produced TLS errors. Never mask `component:419` warnings by raising thresholds without addressing the cause.
