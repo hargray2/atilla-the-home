@@ -134,7 +134,7 @@ class ReadOnlyFatFs {
     crc ^= 0xffffffffU;
     ESP_LOGI("atilla_storage", "BATCH 4/5 CRC32=%08" PRIX32 " expected=630105D1", crc);
     if (crc != 0x630105D1U) return false;
-    auto dir = std::unique_ptr<DIR>(new (std::nothrow) DIR{});
+    auto dir = std::unique_ptr<FF_DIR>(new (std::nothrow) FF_DIR{});
     auto info = std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
     if (!dir || !info) { ESP_LOGE("atilla_storage", "BATCH FAIL heap directory allocation"); return false; }
     char root[12];
@@ -149,7 +149,7 @@ class ReadOnlyFatFs {
     for (; entries < 16; ++entries) {
       std::memset(info.get(), 0, sizeof(FILINFO));
       rc = f_readdir(dir.get(), info.get());
-      if (rc != FR_OK || info->fname[0] == '\\0') break;
+      if (rc != FR_OK || info->fname[0] == 0) break;
       if (std::strcmp(info->fname, "SYSTEM~1") == 0) found = true;
       ESP_LOGI("atilla_storage", "BATCH directory entry %u: %s", entries + 1, info->fname);
     }
