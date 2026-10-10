@@ -64,7 +64,14 @@ class ReadOnlyFatFs {
     return true;
   }
   void unmount() {
-    if (!mounted_) {\n      if (active_ == this) {\n        ff_diskio_register(drive_, nullptr);\n        active_ = nullptr;\n        drive_ = FF_DRV_NOT_USED;\n      }\n      return;\n    }
+    if (!mounted_) {
+      if (active_ == this) {
+        ff_diskio_register(drive_, nullptr);
+        active_ = nullptr;
+        drive_ = FF_DRV_NOT_USED;
+      }
+      return;
+    }
     (void) f_mount(nullptr, drive_path_, 0);
     ff_diskio_register(drive_, nullptr);
     mounted_ = false;
