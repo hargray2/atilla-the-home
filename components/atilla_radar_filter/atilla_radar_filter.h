@@ -29,8 +29,74 @@ inline int resolve_dbz_rgb(uint32_t rgb) {
   return -1; // Never remove an unknown pixel: image may be anti-aliased.
 }
 inline int resolve_dbz_565(uint16_t rgb) {
-  for (int i=0;i<65;i++) if (rgb==rgb565(kSourceRgb[i])) return i;
-  return -1;
+  // Exact RGB565 palette index: bounded switch instead of 65 comparisons/pixel.
+  switch (rgb) {
+    case 0x83cdu: return 0;
+    case 0x83edu: return 1;
+    case 0x8c0du: return 3;
+    case 0x8c2du: return 4;
+    case 0x944eu: return 5;
+    case 0x9c8eu: return 6;
+    case 0xacefu: return 7;
+    case 0xb54fu: return 8;
+    case 0xc5b0u: return 9;
+    case 0xce10u: return 10;
+    case 0xd631u: return 11;
+    case 0xd651u: return 12;
+    case 0xde72u: return 13;
+    case 0xde92u: return 14;
+    case 0x8efdu: return 15;
+    case 0x6e9du: return 16;
+    case 0x563du: return 17;
+    case 0x35dcu: return 18;
+    case 0x1d7cu: return 19;
+    case 0x051cu: return 20;
+    case 0x04dau: return 21;
+    case 0x0499u: return 22;
+    case 0x0457u: return 23;
+    case 0x03f6u: return 24;
+    case 0x03b5u: return 25;
+    case 0x0394u: return 26;
+    case 0x0353u: return 27;
+    case 0x0312u: return 28;
+    case 0x02d1u: return 29;
+    case 0x02b1u: return 30;
+    case 0x0290u: return 31;
+    case 0x026fu: return 32;
+    case 0x024eu: return 33;
+    case 0x022du: return 34;
+    case 0xff60u: return 35;
+    case 0xff00u: return 36;
+    case 0xfe80u: return 37;
+    case 0xfe20u: return 38;
+    case 0xfda0u: return 39;
+    case 0xfd40u: return 40;
+    case 0xfce0u: return 41;
+    case 0xfca0u: return 42;
+    case 0xfc40u: return 43;
+    case 0xfc00u: return 44;
+    case 0xfa20u: return 45;
+    case 0xf1a0u: return 46;
+    case 0xe140u: return 47;
+    case 0xd8c0u: return 48;
+    case 0xc860u: return 49;
+    case 0xc000u: return 50;
+    case 0xa800u: return 51;
+    case 0x8800u: return 52;
+    case 0x7000u: return 53;
+    case 0x5800u: return 54;
+    case 0xfd5fu: return 55;
+    case 0xfcffu: return 56;
+    case 0xfcbfu: return 57;
+    case 0xfc5fu: return 58;
+    case 0xfc1fu: return 59;
+    case 0xfbbfu: return 60;
+    case 0xfb7fu: return 61;
+    case 0xfb1fu: return 62;
+    case 0xfadfu: return 63;
+    case 0xfa7fu: return 64;
+    default: return -1;
+  }
 }
 
 // Operates in-place on a decoded, complete tile, no second full-size buffer.
