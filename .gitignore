@@ -1,0 +1,29 @@
+# Never publish private ESPHome firmware or local credentials
+secrets.yaml
+**/secrets.yaml
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+**/.esphome/
+.esphome/
+.vscode/
+__pycache__/
+*.py[cod]
+.DS_Store
+# Generated firmware and binaries
+*.bin
+*.elf
+*.map
+*.uf2
+*.ota
+build/
+dist/
+# Keep the private full-device YAML off public GitHub
+waveshare.yaml
+waveshare-*.yaml
+ATILLA_*_FULL.yaml
+ATILLA_*_FULL.txt
