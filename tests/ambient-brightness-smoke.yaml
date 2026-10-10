@@ -32,7 +32,7 @@ number:
     set_action:
       - output.set_level:
           id: atilla_backlight_pwm
-          level: !lambda 'return id(screen_is_asleep) ? 0.30f : x / 100.0f;'
+          level: !lambda 'return id(screen_is_asleep) ? 0.25f : x / 100.0f;'
 
 script:
   - id: execute_screen_sleep
@@ -42,7 +42,7 @@ script:
           value: "true"
       - output.set_level:
           id: atilla_backlight_pwm
-          level: 30%
+          level: 25%
   - id: execute_screen_wake
     then:
       - output.set_level:
