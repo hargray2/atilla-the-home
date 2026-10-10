@@ -6,7 +6,7 @@
 #include <cstring>
 #include "esphome/core/log.h"
 
-namespace atilla_storage {
+namespace esphome::atilla_storage {
 struct Bus {
   void *ptr{nullptr};
   uint8_t (*transfer)(void *, uint8_t){nullptr};
@@ -104,7 +104,7 @@ class ReadOnlySD {
     return true;
   }
 };
-} // namespace atilla_storage
+} // namespace esphome::atilla_storage
 
 // ESPHome codegen integration. No SD access during setup in this compile-only test.
 #include "esphome/core/component.h"
