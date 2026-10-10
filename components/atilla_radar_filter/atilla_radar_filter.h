@@ -34,7 +34,7 @@ inline int resolve_dbz_565(uint16_t rgb) {
 }
 
 // Operates in-place on a decoded, complete tile, no second full-size buffer.
-// Supported: RGB+alpha BGRA (4bpp) or RGB565+separate 8-bit alpha plane (3bpp).
+// Supported: RGB+alpha BGRA (4bpp) or RGB565+separate 8-bit alpha plane (get_bpp()==16; 3 bytes/pixel allocated).
 // This function MUST NOT be used on chroma-key or opaque image types.
 // The runtime integration must verify transparency==ALPHA_CHANNEL from YAML
 // before calling; has_transparency alone does not distinguish chroma key.
@@ -64,7 +64,7 @@ inline bool apply_rain_palette(online_image::OnlineImage &img,
       }
       changed++;
     }
-  } else if (img.get_type()==image::IMAGE_TYPE_RGB565 && img.get_bpp()==24) {
+  } else if (img.get_type()==image::IMAGE_TYPE_RGB565 && img.get_bpp()==16) {
     uint8_t *alpha=buf+2*count;
     for (size_t i=0;i<count;i++) {
       if (!alpha[i]) continue;
