@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <new>
 #include "esphome/core/hal.h"  // millis() timing diagnostics
 #include "esp_err.h"
 #include "ff.h"
@@ -49,33 +51,45 @@ class ReadOnlyFatFs {
     return true;
   }
   bool read_known_file(uint32_t &crc, uint32_t &size) {
-    if (!mounted_) return false;
+    // Previous device firmware rebooted before the first log in this function.
+    // Keep the potentially large FatFs FIL allocation off the caller's stack.
+    ESP_LOGI("atilla_storage", "FATFS read function entered; no file opened yet");
+    if (!mounted_) {
+      ESP_LOGW("atilla_storage", "FATFS read refused: filesystem not mounted");
+      return false;
+    }
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) {
+      ESP_LOGE("atilla_storage", "FATFS FIL heap allocation failed; no file opened");
+      return false;
+    }
+    ESP_LOGI("atilla_storage", "FATFS FIL allocated outside task stack (%u bytes)",
+             unsigned(sizeof(FIL)));
     char pathname[80];
     std::snprintf(pathname, sizeof(pathname), "%s/SYSTEM~1/WPSETT~1.DAT", drive_path_);
-    FIL file{};
     ESP_LOGI("atilla_storage", "FATFS opening existing file (read only)");
     const uint32_t open_started = millis();
-    const FRESULT open_rc = f_open(&file, pathname, FA_READ);
+    const FRESULT open_rc = f_open(file.get(), pathname, FA_READ);
     ESP_LOGI("atilla_storage", "FATFS f_open result=%u elapsed=%" PRIu32 " ms",
              unsigned(open_rc), uint32_t(millis() - open_started));
     if (open_rc != FR_OK) return false;
     const FSIZE_t expected_size = 12;
-    const FSIZE_t actual_size = f_size(&file);
+    const FSIZE_t actual_size = f_size(file.get());
     ESP_LOGI("atilla_storage", "FATFS f_size=%" PRIu32 " expected=12", static_cast<uint32_t>(actual_size));
     if (actual_size != expected_size) {
       ESP_LOGW("atilla_storage", "FATFS unexpected existing file size; closing without reading");
-      (void) f_close(&file);
+      (void) f_close(file.get());
       return false;
     }
     uint8_t buf[12] = {};
     UINT got = 0;
     ESP_LOGI("atilla_storage", "FATFS f_read starting");
     const uint32_t read_started = millis();
-    const FRESULT read_rc = f_read(&file, buf, 12, &got);
+    const FRESULT read_rc = f_read(file.get(), buf, 12, &got);
     ESP_LOGI("atilla_storage", "FATFS f_read result=%u bytes=%u elapsed=%" PRIu32 " ms",
              unsigned(read_rc), unsigned(got), uint32_t(millis() - read_started));
     const uint32_t close_started = millis();
-    const FRESULT close_rc = f_close(&file);
+    const FRESULT close_rc = f_close(file.get());
     ESP_LOGI("atilla_storage", "FATFS f_close result=%u elapsed=%" PRIu32 " ms",
              unsigned(close_rc), uint32_t(millis() - close_started));
     const bool ok = read_rc == FR_OK && got == 12 && close_rc == FR_OK;
