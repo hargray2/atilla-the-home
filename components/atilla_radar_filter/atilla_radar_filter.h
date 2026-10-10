@@ -103,6 +103,7 @@ inline int resolve_dbz_565(uint16_t rgb) {
     case 0x7b8cu: return -10;
     case 0x7bacu: return -10;
     case 0x7bccu: return -10;
+    case 0xffffu: return 65; // RainViewer >=65 dBZ rendered white; treat as extreme precipitation.
     default: return -1;
   }
 }
