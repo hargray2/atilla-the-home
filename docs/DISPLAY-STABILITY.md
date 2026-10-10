@@ -29,3 +29,26 @@ ESP-IDF `CONFIG_LCD_RGB_RESTART_IN_VSYNC` is designed to recover a shifted RGB D
 ## Security and scope
 
 Do not commit private YAML, home coordinates, SSID, passwords or API keys. This branch documents display experiments; FATFS remains on its separate `dev/fatfs-readonly` branch. No display modification has yet been built or flashed.
+
+## Verified ESPHome 2026.9.1 display model and private YAML (2026-10-10)
+
+The working full ATILLA YAML was inspected locally (not uploaded to GitHub). Actual display stanza:
+
+```yaml
+display:
+  - platform: mipi_rgb
+    id: my_display
+    model: ESP32-S3-TOUCH-LCD-7-800X480
+    dimensions: {width: 800, height: 480}
+    color_order: RGB
+    auto_clear_enabled: false
+    update_interval: 33ms
+lvgl:
+  buffer_size: 12%
+```
+
+Espressif-compatible ESPHome `esphome/components/mipi_rgb/models/waveshare.py` tag `2026.9.1` defines the 7-inch model as an extension of `wave_4_3` with inherited **`pclk_frequency: 16MHz`**, `pclk_inverted: true` and 7-inch-specific sync porches (HSYNC 8/8/4, VSYNC 16/16/4). There is **no explicit PCLK override in the user's YAML**.
+
+**One-variable experiment:** add `pclk_frequency: 14MHz` immediately below `model:` to the `mipi_rgb` display, leaving everything else unchanged. This is an experiment to reduce RGB scanout pressure, not a proven glitch fix; compare idle blips and radar/clock for 20–30 minutes, and restore 16MHz if not improved. No `CONFIG_LCD_RGB_RESTART_IN_VSYNC` change is being made now: the brief blips are not evidence of a shifted DMA stream and the option is not guaranteed to prevent display tearing.
+
+No private location or credentials appear in this documentation. The full YAML variant remains a private downloadable file, not a repository commit.
