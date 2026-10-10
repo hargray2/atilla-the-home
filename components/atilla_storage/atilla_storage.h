@@ -105,3 +105,25 @@ class ReadOnlySD {
   }
 };
 } // namespace atilla_storage
+
+// ESPHome codegen integration. No SD access during setup in this compile-only test.
+#include "esphome/core/component.h"
+#include "esphome/components/spi_device/spi_device.h"
+namespace esphome::atilla_storage {
+class AtillaStorage : public Component {
+ public:
+  void set_devices(spi_device::SPIDeviceComponent *card, spi_device::SPIDeviceComponent *idle) {
+    card_ = card;
+    idle_ = idle;
+  }
+  void setup() override {
+    ESP_LOGI("atilla_storage", "ATILLA storage driver linked (compile-only, SD untouched)");
+  }
+  void dump_config() override {
+    ESP_LOGCONFIG("atilla_storage", "ATILLA storage driver compiled; card operations DISABLED");
+  }
+ protected:
+  spi_device::SPIDeviceComponent *card_{nullptr};
+  spi_device::SPIDeviceComponent *idle_{nullptr};
+};
+} // namespace esphome::atilla_storage
