@@ -1,13 +1,30 @@
-"""ATILLA SD storage — initial ESPHome external component scaffold.
+"""ATILLA 4.6 experimental read-only ESPHome SD component.
 
-This first version intentionally does not touch the SD card. The C++
-FATFS adapter is not yet validated for ESPHome 2026.9.1 and CH422G CS.
+This integration uses the two existing generic ESPHome spi_device entities.
+No filesystem mount or writes are enabled.
 """
-
+import esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome.const import CONF_ID
+from esphome.components import spi_device
 
-CONFIG_SCHEMA = cv.Schema({})
+DEPENDENCIES = ["spi_device"]
+
+atilla_ns = cg.esphome_ns.namespace("atilla_storage")
+AtillaStorage = atilla_ns.class_("AtillaStorage", cg.Component)
+
+CONF_CARD_DEVICE = "card_device"
+CONF_IDLE_DEVICE = "idle_device"
+
+CONFIG_SCHEMA = cv.Schema({
+    cv.GenerateID(): cv.declare_id(AtillaStorage),
+    cv.Required(CONF_CARD_DEVICE): cv.use_id(spi_device.SPIDeviceComponent),
+    cv.Required(CONF_IDLE_DEVICE): cv.use_id(spi_device.SPIDeviceComponent),
+}).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
-    # No runtime behaviour until the read-only adapter has been validated.
-    pass
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
+    card = await cg.get_variable(config[CONF_CARD_DEVICE])
+    idle = await cg.get_variable(config[CONF_IDLE_DEVICE])
+    cg.add(var.set_devices(card, idle))
