@@ -96,6 +96,62 @@ class ReadOnlyFatFs {
              unsigned(close_rc));
     return close_rc == FR_OK;
   }
+  bool run_batched_write_roundtrip() {
+    // May alter FAT allocation/directory sectors. Test with disposable/backup card.
+    // A fixed, unique file name prevents overwriting existing user data.
+    ESP_LOGI("atilla_storage", "WRITE BATCH 1/7 verify CSD capacity");
+    if (!mounted_ || !sd_.verify_physical_capacity() || !sd_.enable_test_writes()) {
+      ESP_LOGE("atilla_storage", "WRITE BATCH abort: capacity verification failed");
+      return false;
+    }
+    writes_active_ = true;
+    // This test file is unique to ATILLA. Never truncate or overwrite an existing file.
+    const char *data = "ATILLA SD READ WRITE TEST v1";
+    const UINT data_len = static_cast<UINT>(std::strlen(data));
+    char pathname[40];
+    std::snprintf(pathname,sizeof(pathname),"%s/ATILLA.TST",drive_path_);
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) { ESP_LOGE("atilla_storage","WRITE BATCH heap FIL failed"); return false; }
+    ESP_LOGI("atilla_storage", "WRITE BATCH 2/7 create-new %s (no overwrite)", pathname);
+    FRESULT rc = f_open(file.get(),pathname, FA_WRITE | FA_CREATE_NEW);
+    ESP_LOGI("atilla_storage", "WRITE BATCH f_open(create-new)=%u",unsigned(rc));
+    if (rc != FR_OK) return false;
+    UINT written=0;
+    ESP_LOGI("atilla_storage", "WRITE BATCH 3/7 f_write %u bytes",unsigned(data_len));
+    const FRESULT wr=f_write(file.get(),data,data_len,&written);
+    const FRESULT sync=(wr==FR_OK && written==data_len) ? f_sync(file.get()) : FR_DISK_ERR;
+    const FRESULT closed=f_close(file.get());
+    ESP_LOGI("atilla_storage", "WRITE BATCH write=%u bytes=%u sync=%u close=%u",
+             unsigned(wr),unsigned(written),unsigned(sync),unsigned(closed));
+    if (wr!=FR_OK || written!=data_len || sync!=FR_OK || closed!=FR_OK) return false;
+    // Re-open to independently validate the bytes after a close.
+    file.reset(new (std::nothrow) FIL{});
+    if (!file) return false;
+    ESP_LOGI("atilla_storage", "WRITE BATCH 4/7 reopen FA_READ");
+    rc=f_open(file.get(),pathname,FA_READ);
+    if (rc!=FR_OK) { ESP_LOGE("atilla_storage","WRITE BATCH reopen=%u",unsigned(rc)); return false; }
+    char received[40]={};
+    UINT got=0;
+    const FRESULT rd=f_read(file.get(),received,data_len,&got);
+    const FRESULT recl=f_close(file.get());
+    const bool matches=(rd==FR_OK && recl==FR_OK && got==data_len &&
+                        std::memcmp(received,data,data_len)==0);
+    ESP_LOGI("atilla_storage", "WRITE BATCH 5/7 verified=%s read=%u got=%u close=%u",
+             matches?"YES":"NO",unsigned(rd),unsigned(got),unsigned(recl));
+    if (!matches) return false;
+    ESP_LOGI("atilla_storage", "WRITE BATCH 6/7 delete dedicated test file");
+    const FRESULT unlink_rc=f_unlink(pathname);
+    ESP_LOGI("atilla_storage", "WRITE BATCH delete=%u",unsigned(unlink_rc));
+    if(unlink_rc != FR_OK) return false;
+    FILINFO info{};
+    const FRESULT stat_rc=f_stat(pathname,&info);
+    ESP_LOGI("atilla_storage", "WRITE BATCH 7/7 verify removal stat=%u expected=%u",
+             unsigned(stat_rc),unsigned(FR_NO_FILE));
+    const bool ok=(stat_rc==FR_NO_FILE);
+    ESP_LOGI("atilla_storage", "WRITE BATCH %s minimum-free stack=%u bytes",
+             ok?"PASS":"FAIL",unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    return ok;
+  }
   bool run_batched_read_only_diagnostics() {
     ESP_LOGI("atilla_storage", "BATCH 1/5 mounted=%s stack_min_free=%u bytes",
              mounted_ ? "YES" : "NO", unsigned(uxTaskGetStackHighWaterMark(nullptr)));
@@ -234,6 +290,8 @@ class ReadOnlyFatFs {
     ESP_LOGI("atilla_storage", "FATFS f_unmount result=%u elapsed=%" PRIu32 " ms",
              unsigned(unmount_rc), uint32_t(millis() - unmount_started));
     ff_diskio_register(drive_, nullptr);
+    writes_active_ = false;
+    sd_.disable_test_writes();
     mounted_ = false;
     active_ = nullptr;
     drive_ = FF_DRV_NOT_USED;
@@ -245,7 +303,7 @@ class ReadOnlyFatFs {
   static DSTATUS disk_init_(BYTE pdrv) { return disk_status_(pdrv); }
   static DSTATUS disk_status_(BYTE pdrv) {
     return active_ && active_->drive_ == pdrv && active_->sd_.initialized()
-      ? STA_PROTECT : STA_NOINIT;
+      ? (active_->writes_active_ ? 0 : STA_PROTECT) : STA_NOINIT;
   }
   static DRESULT disk_read_(BYTE pdrv, BYTE *out, uint32_t sector, UINT count) {
     if ((disk_status_(pdrv) & STA_NOINIT) || !out || !count) return RES_NOTRDY;
@@ -256,8 +314,14 @@ class ReadOnlyFatFs {
         return RES_ERROR;
     return RES_OK;
   }
-  static DRESULT disk_write_(BYTE, const BYTE *, uint32_t, UINT) {
-    return RES_WRPRT;
+  static DRESULT disk_write_(BYTE pdrv, const BYTE *in, uint32_t sector, UINT count) {
+    if (!active_ || !active_->writes_active_) return RES_WRPRT;
+    if ((disk_status_(pdrv) & STA_NOINIT) || !in || count==0 ||
+        uint64_t(sector) < active_->sd_.partition_start() ||
+        uint64_t(sector)+count > active_->sd_.physical_sector_limit()) return RES_PARERR;
+    for (UINT i=0;i<count;i++)
+      if (!active_->sd_.write_physical_sector(sector+i,in+512U*i)) return RES_ERROR;
+    return RES_OK;
   }
   static DRESULT disk_ioctl_(BYTE pdrv, BYTE cmd, void *out) {
     if (disk_status_(pdrv) & STA_NOINIT) return RES_NOTRDY;
@@ -283,6 +347,7 @@ class ReadOnlyFatFs {
   BYTE drive_{FF_DRV_NOT_USED};
   char drive_path_[8]{};
   bool mounted_{false};
+  bool writes_active_{false};
   inline static ReadOnlyFatFs *active_{nullptr};
 };
 } // namespace esphome::atilla_storage::experimental
