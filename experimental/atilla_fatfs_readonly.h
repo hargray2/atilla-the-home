@@ -64,7 +64,7 @@ class ReadOnlyFatFs {
     return true;
   }
   void unmount() {
-    if (!mounted_) return;
+    if (!mounted_) {\n      if (active_ == this) {\n        ff_diskio_register(drive_, nullptr);\n        active_ = nullptr;\n        drive_ = FF_DRV_NOT_USED;\n      }\n      return;\n    }
     (void) f_mount(nullptr, drive_path_, 0);
     ff_diskio_register(drive_, nullptr);
     mounted_ = false;
@@ -78,10 +78,10 @@ class ReadOnlyFatFs {
   static DSTATUS disk_init_(BYTE pdrv) { return disk_status_(pdrv); }
   static DSTATUS disk_status_(BYTE pdrv) {
     return active_ && active_->drive_ == pdrv && active_->sd_.initialized()
-      ? 0 : STA_NOINIT;
+      ? STA_PROTECT : STA_NOINIT;
   }
   static DRESULT disk_read_(BYTE pdrv, BYTE *out, uint32_t sector, UINT count) {
-    if (disk_status_(pdrv) || !out || !count) return RES_NOTRDY;
+    if ((disk_status_(pdrv) & STA_NOINIT) || !out || !count) return RES_NOTRDY;
     if (uint64_t(sector) + count > active_->sd_.physical_sector_limit())
       return RES_PARERR;
     for (UINT i = 0; i < count; i++)
@@ -93,7 +93,7 @@ class ReadOnlyFatFs {
     return RES_WRPRT;
   }
   static DRESULT disk_ioctl_(BYTE pdrv, BYTE cmd, void *out) {
-    if (disk_status_(pdrv)) return RES_NOTRDY;
+    if (disk_status_(pdrv) & STA_NOINIT) return RES_NOTRDY;
     if (cmd == CTRL_SYNC) return RES_OK;
     if (out == nullptr) return RES_PARERR;
     switch (cmd) {
