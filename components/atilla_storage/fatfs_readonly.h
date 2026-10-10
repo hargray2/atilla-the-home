@@ -53,7 +53,15 @@ class ReadOnlyFatFs {
     const FRESULT open_rc = f_open(&file, pathname, FA_READ);
     ESP_LOGI("atilla_storage", "FATFS f_open result=%u", unsigned(open_rc));
     if (open_rc != FR_OK) return false;
-    uint8_t buf[64] = {};
+    const FSIZE_t expected_size = 12;
+    const FSIZE_t actual_size = f_size(&file);
+    ESP_LOGI("atilla_storage", "FATFS f_size=%" PRIu32 " expected=12", static_cast<uint32_t>(actual_size));
+    if (actual_size != expected_size) {
+      ESP_LOGW("atilla_storage", "FATFS unexpected existing file size; closing without reading");
+      (void) f_close(&file);
+      return false;
+    }
+    uint8_t buf[12] = {};
     UINT got = 0;
     ESP_LOGI("atilla_storage", "FATFS f_read starting");
     const FRESULT read_rc = f_read(&file, buf, 12, &got);
@@ -69,6 +77,11 @@ class ReadOnlyFatFs {
     }
     crc = x ^ 0xffffffffU;
     size = got;
+    if (crc != 0x630105D1U) {
+      ESP_LOGW("atilla_storage", "FATFS CRC mismatch: got=%08" PRIX32 " expected=630105D1", crc);
+      return false;
+    }
+    ESP_LOGI("atilla_storage", "FATFS file bytes verified against known-good raw-sector CRC");
     return true;
   }
   void unmount() {
