@@ -1,0 +1,107 @@
+#pragma once
+// ATILLA THE HOME 4.6 — experimental READ-ONLY SD SPI transport.
+// NOT FATFS. NOT YET COMPILE-TESTED ON ESPHome 2026.9.1.
+// Existing ESPHome SPIDevice instances handle CH422G EXIO4 chip select.
+#include <cstdint>
+#include <cstring>
+#include "esphome/core/log.h"
+
+namespace atilla_storage {
+struct Bus {
+  void *ptr{nullptr};
+  uint8_t (*transfer)(void *, uint8_t){nullptr};
+  void (*enable)(void *){nullptr};
+  void (*disable)(void *){nullptr};
+  uint8_t tx(uint8_t b) const { return transfer(ptr,b); }
+  void select() const { enable(ptr); }
+  void deselect() const { disable(ptr); }
+};
+template<typename T> Bus wrap(T *p) {
+  Bus b; b.ptr=p;
+  b.transfer=[](void *o,uint8_t v)->uint8_t{return static_cast<T*>(o)->transfer_byte(v);};
+  b.enable=[](void *o){static_cast<T*>(o)->enable();};
+  b.disable=[](void *o){static_cast<T*>(o)->disable();};
+  return b;
+}
+class ReadOnlySD {
+ public:
+  template<typename T,typename U> void bind(T *card, U *idle) {
+    card_=wrap(card); idle_=wrap(idle);
+  }
+  bool begin() {
+    initialized_=false;
+    if (!card_.ptr || !idle_.ptr) return false;
+    idle_.select();
+    for (int i=0;i<12;i++) idle_.tx(0xff);
+    idle_.deselect();
+    card_.select();
+    bool ok=false;
+    do {
+      if (command_(0,0,0x95)!=1) break;
+      if (command_(8,0x1AA,0x87)!=1) break;
+      uint8_t echo[4]; for(auto &v:echo)v=card_.tx(0xff);
+      if (echo[2]!=1 || echo[3]!=0xAA) break;
+      bool ready=false;
+      for(int i=0;i<200;i++) {
+        uint8_t r55=command_(55,0,0x01);
+        if(r55>1) break;
+        uint8_t r41=command_(41,0x40000000,0x01);
+        if(r41==0){ready=true;break;}
+        if(r41!=1)break;
+      }
+      if(!ready || command_(58,0,0x01)!=0)break;
+      uint8_t ocr[4];for(auto &v:ocr)v=card_.tx(0xff);
+      if(!(ocr[0]&0x40))break; // SDHC/SDXC block addressed
+      uint8_t sec[512];
+      if(!read_selected_(0,sec) || !signature_(sec))break;
+      uint8_t type=sec[450];
+      if(type!=0x0B && type!=0x0C)break;
+      partition_start_=le32_(sec+454);
+      partition_sectors_=le32_(sec+458);
+      if(!partition_start_ || !partition_sectors_)break;
+      if(uint64_t(partition_start_)+partition_sectors_>0xFFFFFFFFULL)break;
+      if(!read_selected_(partition_start_,sec)||!signature_(sec))break;
+      if(sec[11]!=0 || sec[12]!=2 || !sec[13] || !sec[16])break;
+      if(le32_(sec+36)==0 || le32_(sec+44)<2)break;
+      ok=true;
+    } while(false);
+    card_.deselect();
+    initialized_=ok;
+    ESP_LOGI("atilla_storage","SDHC/FAT32 read-only init: %s",ok?"PASS":"FAIL");
+    return ok;
+  }
+  // Physical absolute-LBA sector read, NOT filesystem-relative.
+  bool read_sector(uint32_t lba,uint8_t *out) {
+    if(!initialized_ || !out || lba>=partition_start_+partition_sectors_)return false;
+    card_.select();bool ok=read_selected_(lba,out);card_.deselect();return ok;
+  }
+  uint32_t partition_start() const {return partition_start_;}
+  uint32_t partition_sectors() const {return partition_sectors_;}
+  bool initialized() const {return initialized_;}
+  // No write command or filesystem modification is exposed.
+ private:
+  Bus card_,idle_;
+  bool initialized_{false};
+  uint32_t partition_start_{0},partition_sectors_{0};
+  static bool signature_(const uint8_t *p) {return p[510]==0x55 && p[511]==0xAA;}
+  static uint32_t le32_(const uint8_t *p) {
+    return uint32_t(p[0]) | uint32_t(p[1])<<8 | uint32_t(p[2])<<16 | uint32_t(p[3])<<24;
+  }
+  uint8_t command_(uint8_t cmd,uint32_t arg,uint8_t crc) {
+    card_.tx(0xff);card_.tx(uint8_t(0x40|cmd));
+    for(int s=24;s>=0;s-=8)card_.tx(uint8_t(arg>>s));
+    card_.tx(crc);
+    for(int i=0;i<16;i++){uint8_t r=card_.tx(0xff);if((r&0x80)==0)return r;}
+    return 0xff;
+  }
+  bool read_selected_(uint32_t lba,uint8_t *buf) {
+    if(command_(17,lba,0x01)!=0)return false;
+    uint8_t token=0xff;
+    for(int i=0;i<16000;i++){token=card_.tx(0xff);if(token!=0xff)break;}
+    if(token!=0xfe)return false;
+    for(int i=0;i<512;i++)buf[i]=card_.tx(0xff);
+    card_.tx(0xff);card_.tx(0xff); // card-supplied CRC16 currently ignored
+    return true;
+  }
+};
+} // namespace atilla_storage
