@@ -119,6 +119,22 @@ class ReadOnlyFatFs {
     auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
     auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[512]);
     if (!file || !buffer) return false;
+    // A previous watchdog may leave a complete VERIFY.BIN. Never overwrite
+    // or remove that evidence; verify it in read-only mode on the next run.
+    auto existing = std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+    if (!existing) return false;
+    const FRESULT existing_rc = f_stat(filename, existing.get());
+    ESP_LOGI("atilla_storage", "SERVICE prior-file stat=%u", unsigned(existing_rc));
+    if (existing_rc == FR_OK) {
+      ESP_LOGW("atilla_storage", "SERVICE VERIFY.BIN already exists (%" PRIu32 " bytes); preserving file, skipping all writes",
+               uint32_t(existing->fsize));
+      // Leave existing evidence in place. Distinguish this from a success.
+      return false;
+    }
+    if (existing_rc != FR_NO_FILE) {
+      ESP_LOGE("atilla_storage", "SERVICE unexpected stat error=%u, refusing write", unsigned(existing_rc));
+      return false;
+    }
     ESP_LOGI("atilla_storage", "SERVICE 3/8 create-new VERIFY.BIN");
     rc = f_open(file.get(), filename, FA_WRITE | FA_CREATE_NEW);
     if (rc != FR_OK) {
