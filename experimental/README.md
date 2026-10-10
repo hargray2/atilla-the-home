@@ -26,3 +26,11 @@ Reviewed ESP-IDF disk-I/O declarations: `ff_diskio_impl_t` expects `init/status/
 Corrected a malformed escaped-newline block in `unmount()`. The prototype reports `STA_PROTECT` to FatFs and rejects all write callbacks with `RES_WRPRT` (read callbacks must therefore test the `STA_NOINIT` bit rather than treating any nonzero status as failure).
 
 **Open engineering risks:** This code is not included in firmware. Before testing a mount, confirm CMake/IDF fatfs component dependency, real `FF_VOLUMES` mapping and FAT32 partition autodetection, lifetime after mount failure, concurrency with existing raw SD code, bounded 512-byte buffers, and watchdog-friendly scheduling. Never call `f_mkfs`.
+
+## Compile-only integration checkpoint
+
+A copy of the adapter now lives in `components/atilla_storage/fatfs_readonly.h` on this **development branch**, and the branch's `atilla_storage.h` includes it. This forces the compiler to parse the adapter without constructing it or calling its mount functions. The normal `main` branch and installed firmware have **not changed**.
+
+The callback typedefs were cross-checked against Espressif's `components/fatfs/diskio/diskio_impl.h` in the ESP-IDF v5.5.1 source, including `ff_diskio_register` and `ff_diskio_get_drive`. This is an upstream reference only; the exact ESP-IDF version bundled in the ATILLA compile output still needs verification.
+
+**Next check:** build this branch as an opt-in experiment. It may report a missing FatFs header, unavailable FatFs dependency, a compiler-level API mismatch, or no error. Do not report the FatFs mount as functional unless the adapter has also been activated and tested on hardware. No SD writes are implemented.
