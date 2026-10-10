@@ -196,6 +196,7 @@ class AtillaStorage : public Component {
   void set_fatfs_fil_heap_probe(bool enabled) { fatfs_fil_heap_probe_ = enabled; }
   void set_fatfs_open_only_probe(bool enabled) { fatfs_open_only_probe_ = enabled; }
   void set_fatfs_batch_read_probe(bool enabled) { fatfs_batch_read_probe_ = enabled; }
+  void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void setup() override {
     start_ms_ = millis();
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
@@ -306,7 +307,10 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (fatfs_batch_read_probe_) {
+    if (fatfs_write_roundtrip_test_) {
+      const bool ok = fatfs.run_batched_write_roundtrip();
+      ESP_LOGI("atilla_storage", "FATFS WRITE ROUNDTRIP %s", ok ? "PASS" : "FAIL");
+    } else if (fatfs_batch_read_probe_) {
       const bool ok = fatfs.run_batched_read_only_diagnostics();
       ESP_LOGI("atilla_storage", "FATFS BATCH READ-ONLY %s", ok ? "PASS" : "FAIL");
     } else if (fatfs_open_only_probe_) {
@@ -347,6 +351,7 @@ class AtillaStorage : public Component {
   bool fatfs_fil_heap_probe_{false};
   bool fatfs_open_only_probe_{false};
   bool fatfs_batch_read_probe_{false};
+  bool fatfs_write_roundtrip_test_{false};
 };
 } // namespace esphome::atilla_storage
 
