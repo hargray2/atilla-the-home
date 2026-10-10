@@ -1,74 +1,90 @@
 #pragma once
-// ATILLA radar intensity filter prototype (RainViewer scheme 2: Universal Blue).
-// Remove decoded returns below 35 dBZ from downloaded radar images only.
-// Published color table: https://www.rainviewer.com/api/color-schemes.html
-// NOT yet tested on ATILLA or wired into the private full YAML.
+// ATILLA experimental radar-only local pixel recoloring, not production-enabled.
+// RainViewer scheme 2 (Universal Blue), published dBZ mapping 0..64.
+// Source: https://www.rainviewer.com/files/rainviewer_api_colors_table.csv
+// Do not call on the basemap. Only call on a completed radar PNG decode.
+// The map stays visible because weak return alpha is set to ZERO.
 #include <cstddef>
 #include <cstdint>
 #include "esphome/components/online_image/online_image.h"
 
 namespace esphome::atilla_radar_filter {
-inline constexpr uint8_t kModerateDbz = 35;
+inline constexpr int kMinimumDbz = 30;
+inline constexpr uint32_t kSourceRgb[65] = {0x827b69u, 0x857d6au, 0x88806cu, 0x8b826du, 0x8e856fu, 0x928871u, 0x9e9375u, 0xaa9e79u, 0xb6a97eu, 0xc2b482u, 0xcec087u, 0xd2c48bu, 0xd6c88fu, 0xdacc93u, 0xded097u, 0x88ddeeu, 0x6cd1ebu, 0x51c5e8u, 0x36bae5u, 0x1baee2u, 0x00a3e0u, 0x009ad5u, 0x0091cau, 0x0088bfu, 0x007fb4u, 0x0077aau, 0x0070a3u, 0x00699cu, 0x006295u, 0x005b8eu, 0x005588u, 0x005180u, 0x004e78u, 0x004a70u, 0x004768u, 0xffee00u, 0xffe000u, 0xffd200u, 0xffc500u, 0xffb700u, 0xffaa00u, 0xff9f00u, 0xff9500u, 0xff8b00u, 0xff8100u, 0xff4400u, 0xf23600u, 0xe62800u, 0xd91b00u, 0xcd0d00u, 0xc10000u, 0xa80000u, 0x8f0000u, 0x760000u, 0x5d0000u, 0xffaaffu, 0xff9fffu, 0xff95ffu, 0xff8bffu, 0xff81ffu, 0xff77ffu, 0xff6cffu, 0xff62ffu, 0xff58ffu, 0xff4effu};
 
-// Palette RGB entries correspond to RainViewer Universal Blue dBZ -10..34.
-// This is an exact palette lookup, not a hue classifier: dark map pixels
-// must NEVER be processed through this function.
-inline constexpr uint32_t kWeakRainRgb[] = {0x636159u, 0x66635au, 0x69665cu, 0x6c685du, 0x6f6b5fu, 0x726e61u, 0x757062u, 0x787364u, 0x7c7565u, 0x7f7867u, 0x005a00u, 0x006100u, 0x006800u, 0x006f00u, 0x007600u, 0x007e00u, 0x017e2bu, 0x037e57u, 0x047e83u, 0x067eafu, 0x087fdbu, 0x0c73ddu, 0x1068e0u, 0x145de2u, 0x1852e5u, 0x1c47e8u, 0x2c3be1u, 0x3c2fdau, 0x4d24d3u, 0x5d18ccu, 0x6e0dc6u, 0x800db9u, 0x920dacu, 0xa40e9fu, 0xb60e92u, 0xc80f86u, 0xc62086u, 0xc43186u, 0xc34286u, 0xc15386u, 0xc06487u, 0xc36b77u, 0xc77268u, 0xca7959u, 0xce804au};
-static_assert(sizeof(kWeakRainRgb) / sizeof(kWeakRainRgb[0]) == 45);
-
-inline bool is_weak_rgb(uint32_t rgb) {
-  for (uint32_t entry : kWeakRainRgb) if (rgb == entry) return true;
-  return false;
+// Custom green -> yellow -> red -> purple. Limited alpha keeps labels/coastlines visible.
+inline uint32_t target_rgba(int dbz) {
+  uint32_t color = 0;
+  if (dbz < 35) color = 0x13bc37u;             // 30..34 green
+  else if (dbz < 45) color = 0xffde00u;        // 35..44 yellow
+  else if (dbz < 55) color = 0xff3528u;        // 45..54 red
+  else color = 0xa934e8u;                      // 55+ purple
+  return (color << 8) | (dbz < 35 ? 0x90u : 0xc8u); // moderate alpha 56%, heavy 78%
+}
+inline uint16_t rgb565(uint32_t c) {
+  return uint16_t((((c >> 16)&0xf8u)<<8) | (((c >> 8)&0xfcu)<<3) | ((c&0xffu)>>3));
+}
+inline int resolve_dbz_rgb(uint32_t rgb) {
+  for (int i=0;i<65;i++) if (rgb==kSourceRgb[i]) return i;
+  return -1; // Never remove an unknown pixel: image may be anti-aliased.
+}
+inline int resolve_dbz_565(uint16_t rgb) {
+  for (int i=0;i<65;i++) if (rgb==rgb565(kSourceRgb[i])) return i;
+  return -1;
 }
 
-inline uint16_t to_rgb565(uint32_t rgb) {
-  const uint8_t r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
-  return uint16_t((r & 0xF8) << 8) | uint16_t((g & 0xFC) << 3) | uint16_t(b >> 3);
-}
-
-inline bool is_weak_rgb565(uint16_t rgb) {
-  for (uint32_t entry : kWeakRainRgb) if (rgb == to_rgb565(entry)) return true;
-  return false;
-}
-
-// Call only after a successful, freshly decoded online_image PNG tile.
-// Original buffer is owned by RuntimeImage and is mutable in that lifecycle.
-// RGB: BGRA 4 bytes/pixel; RGB565: little/big-endian pixel plane + alpha plane.
-// Reject opaque formats: transparency is required to reveal the basemap.
-// No allocations, no HTTPS requests, no additional image buffers.
-inline bool apply_moderate_heavy(online_image::OnlineImage &image,
-                                size_t *hidden_out = nullptr,
-                                bool rgb565_big_endian = false) {
-  if (hidden_out) *hidden_out = 0;
-  if (!image.is_loaded() || image.is_decoding() || !image.has_transparency() ||
-      image.get_width() <= 0 || image.get_height() <= 0) return false;
-  const size_t count = size_t(image.get_width()) * size_t(image.get_height());
-  if (count > 256u * 256u) return false;  // Guard expected radar tile dimensions.
-  const auto type = image.get_type();
-  if (type != image::IMAGE_TYPE_RGB && type != image::IMAGE_TYPE_RGB565) return false;
-  // The intended buffer layout requires transparency: alpha_channel, not chroma key.
-  // Guarding via has_transparency() alone is insufficient to distinguish those.
-  auto *bytes = const_cast<uint8_t *>(image.get_data_start());
-  if (!bytes) return false;
-  size_t hidden = 0;
-  if (type == image::IMAGE_TYPE_RGB) {
-    if (image.get_bpp() != 32) return false;
+// Operates in-place on a decoded, complete tile, no second full-size buffer.
+// Supported: RGB+alpha BGRA (4bpp) or RGB565+separate 8-bit alpha plane (3bpp).
+// This function MUST NOT be used on chroma-key or opaque image types.
+// The runtime integration must verify transparency==ALPHA_CHANNEL from YAML
+// before calling; has_transparency alone does not distinguish chroma key.
+inline bool apply_rain_palette(online_image::OnlineImage &img,
+                               bool alpha_channel_configured,
+                               bool rgb565_big_endian=false,
+                               size_t *changed_out=nullptr) {
+  if (changed_out) *changed_out=0;
+  if (!alpha_channel_configured || !img.has_transparency() ||
+      !img.is_loaded() || img.is_decoding()) return false;
+  if (img.get_width()!=256 || img.get_height()!=256) return false;
+  uint8_t *buf=const_cast<uint8_t*>(img.get_data_start());
+  if (!buf) return false;
+  const size_t count=256u*256u;
+  size_t changed=0;
+  if (img.get_type()==image::IMAGE_TYPE_RGB && img.get_bpp()==32) {
     for (size_t i=0;i<count;i++) {
-      uint8_t *p = bytes + i * 4u; // B,G,R,A
-      const uint32_t rgb = (uint32_t(p[2]) << 16) | (uint32_t(p[1]) << 8) | p[0];
-      if (p[3] && is_weak_rgb(rgb)) { p[3] = 0; hidden++; }
+      uint8_t *p=buf+4*i; // ESPHome BGRA.
+      if (!p[3]) continue;
+      const int dbz=resolve_dbz_rgb((uint32_t(p[2])<<16)|(uint32_t(p[1])<<8)|p[0]);
+      if (dbz<0) continue;
+      if (dbz<kMinimumDbz) { p[3]=0; }
+      else {
+        const uint32_t out=target_rgba(dbz);
+        p[0]=(out>>8)&0xffu; p[1]=(out>>16)&0xffu; p[2]=(out>>24)&0xffu;
+        p[3]=uint8_t((uint32_t(p[3])*(out&0xffu))/255u);
+      }
+      changed++;
     }
-  } else {
-    if (image.get_bpp() != 24) return false;
-    auto *alpha = bytes + count * 2u;
+  } else if (img.get_type()==image::IMAGE_TYPE_RGB565 && img.get_bpp()==24) {
+    uint8_t *alpha=buf+2*count;
     for (size_t i=0;i<count;i++) {
-      const uint16_t rgb = rgb565_big_endian
-        ? uint16_t(uint16_t(bytes[2u*i]) << 8 | bytes[2u*i+1])
-        : uint16_t(uint16_t(bytes[2u*i+1]) << 8 | bytes[2u*i]);
-      if (alpha[i] && is_weak_rgb565(rgb)) { alpha[i] = 0; hidden++; }
+      if (!alpha[i]) continue;
+      const uint16_t col=rgb565_big_endian
+        ? uint16_t((uint16_t(buf[2*i])<<8)|buf[2*i+1])
+        : uint16_t((uint16_t(buf[2*i+1])<<8)|buf[2*i]);
+      const int dbz=resolve_dbz_565(col);
+      if (dbz<0) continue;
+      if (dbz<kMinimumDbz) {alpha[i]=0;}
+      else {
+        const uint32_t rgba=target_rgba(dbz);
+        const uint16_t mapped=rgb565(rgba>>8);
+        if (rgb565_big_endian) {buf[2*i]=uint8_t(mapped>>8);buf[2*i+1]=uint8_t(mapped);}
+        else {buf[2*i]=uint8_t(mapped);buf[2*i+1]=uint8_t(mapped>>8);}
+        alpha[i]=uint8_t((uint32_t(alpha[i])*(rgba&0xffu))/255u);
+      }
+      changed++;
     }
-  }
-  if (hidden_out) *hidden_out = hidden;
+  } else return false;
+  if (changed_out) *changed_out=changed;
   return true;
 }
 } // namespace esphome::atilla_radar_filter
