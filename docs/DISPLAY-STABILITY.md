@@ -52,3 +52,11 @@ Espressif-compatible ESPHome `esphome/components/mipi_rgb/models/waveshare.py` t
 **One-variable experiment:** add `pclk_frequency: 14MHz` immediately below `model:` to the `mipi_rgb` display, leaving everything else unchanged. This is an experiment to reduce RGB scanout pressure, not a proven glitch fix; compare idle blips and radar/clock for 20–30 minutes, and restore 16MHz if not improved. No `CONFIG_LCD_RGB_RESTART_IN_VSYNC` change is being made now: the brief blips are not evidence of a shifted DMA stream and the option is not guaranteed to prevent display tearing.
 
 No private location or credentials appear in this documentation. The full YAML variant remains a private downloadable file, not a repository commit.
+
+## On-device result — 14 MHz pixel-clock test SUCCESS (2026-10-10)
+
+The user installed the full ATILLA configuration retaining the original ESPHome `mipi_rgb` Waveshare model, LVGL setup, map/radar and read-only FATFS mount test, with the **single display timing change** `pclk_frequency: 14MHz` instead of the model default 16 MHz. Before the change, short horizontal line/tearing blips occurred **several times per minute**, including while idle; **after the change, the user reports the glitches are completely gone**. This is convincing practical evidence the prior clock was marginal under their runtime load, but it does not prove the specific underlying DMA/PSRAM mechanism.
+
+The same test-run storage logs continued to show SDHC init PASS, raw file CRC32 `630105D1`, FATFS read-only mount PASS and unmount; FATFS file open/read was deliberately skipped. A radar operation logged 776 ms main-loop blocking and deserves separate work later. No display-driver crashes were provided with the success report.
+
+**Decision:** adopt **14 MHz as the confirmed on-device ATILLA display baseline**. Do **not** simultaneously enable `CONFIG_LCD_RGB_RESTART_IN_VSYNC`, change bounce buffers, enable double buffering, or restore 16 MHz without a controlled reason. Continue observing on HOME and RADAR during normal use, and restore the last known-working full YAML if the display regresses. Keep full YAML (including private location and keys) off public GitHub. FATFS development is separate.
