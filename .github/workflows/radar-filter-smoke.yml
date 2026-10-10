@@ -7,6 +7,7 @@ on:
       - "components/atilla_radar_filter/**"
       - "tests/radar-filter-smoke.yaml"
       - "tests/radar_palette_selftest.py"
+      - "tests/ambient-brightness-smoke.yaml"
       - ".github/workflows/radar-filter-smoke.yml"
   workflow_dispatch:
 
@@ -25,5 +26,9 @@ jobs:
         run: python tests/radar_palette_selftest.py
       - name: Validate isolated test YAML
         run: esphome config tests/radar-filter-smoke.yaml
+      - name: Validate ambient brightness behavior config
+        run: esphome config tests/ambient-brightness-smoke.yaml
+      - name: Compile ambient brightness control
+        run: esphome compile tests/ambient-brightness-smoke.yaml
       - name: Compile radar filter adapter
         run: esphome compile tests/radar-filter-smoke.yaml
