@@ -20,8 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install ESPHome 2026.9.1
-        run: pip install "esphome==2026.9.1"
+      - name: Install ESPHome 2026.10.0
+        run: pip install "esphome==2026.10.0"
       - name: Check official palette mapping and cutoffs
         run: python tests/radar_palette_selftest.py
       - name: Validate isolated test YAML
