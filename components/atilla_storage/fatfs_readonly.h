@@ -96,6 +96,92 @@ class ReadOnlyFatFs {
              unsigned(close_rc));
     return close_rc == FR_OK;
   }
+  bool run_storage_service_test() {
+    // Experimental 4 KiB multi-sector integrity check. No existing files overwritten.
+    ESP_LOGI("atilla_storage", "SERVICE 1/8 validate SD physical capacity");
+    if (!mounted_ || !sd_.verify_physical_capacity() || !sd_.enable_test_writes()) return false;
+    writes_active_ = true;
+    char folder[32], filename[48];
+    std::snprintf(folder, sizeof(folder), "%s/ATILLA", drive_path_);
+    std::snprintf(filename, sizeof(filename), "%s/ATILLA/VERIFY.BIN", drive_path_);
+    ESP_LOGI("atilla_storage", "SERVICE 2/8 create or reuse ATILLA folder");
+    FRESULT rc = f_mkdir(folder);
+    if (rc == FR_EXIST) {
+      auto info = std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+      if (!info || f_stat(folder, info.get()) != FR_OK || !(info->fattrib & AM_DIR)) {
+        ESP_LOGE("atilla_storage", "SERVICE path exists but is not a directory");
+        return false;
+      }
+    } else if (rc != FR_OK) {
+      ESP_LOGE("atilla_storage", "SERVICE f_mkdir failure=%u", unsigned(rc));
+      return false;
+    }
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[512]);
+    if (!file || !buffer) return false;
+    ESP_LOGI("atilla_storage", "SERVICE 3/8 create-new VERIFY.BIN");
+    rc = f_open(file.get(), filename, FA_WRITE | FA_CREATE_NEW);
+    if (rc != FR_OK) {
+      ESP_LOGW("atilla_storage", "SERVICE create-new=%u (existing test file never overwritten)",unsigned(rc));
+      return false;
+    }
+    uint32_t expected_crc=0xffffffffU;
+    bool write_ok=true;
+    for(unsigned block=0; block<8; ++block) {
+      for(unsigned i=0;i<512;++i) {
+        uint8_t val=uint8_t((block*73U+i*19U+0x5aU) & 0xffU);
+        buffer[i]=val;
+        expected_crc ^= val;
+        for(unsigned bit=0;bit<8;++bit)
+          expected_crc=(expected_crc>>1)^((expected_crc&1U)?0xedb88320U:0U);
+      }
+      UINT written=0;
+      const FRESULT wr=f_write(file.get(),buffer.get(),512,&written);
+      if(wr!=FR_OK || written!=512) {
+        ESP_LOGE("atilla_storage","SERVICE write block=%u rc=%u written=%u",block,unsigned(wr),unsigned(written));
+        write_ok=false;break;
+      }
+    }
+    expected_crc ^= 0xffffffffU;
+    ESP_LOGI("atilla_storage", "SERVICE 4/8 write 4096 bytes result=%s",write_ok?"PASS":"FAIL");
+    const FRESULT sync_rc=write_ok?f_sync(file.get()):FR_DISK_ERR;
+    const FRESULT close_rc=f_close(file.get());
+    if(!write_ok||sync_rc!=FR_OK||close_rc!=FR_OK) return false;
+    file.reset(new (std::nothrow) FIL{});
+    if (!file) return false;
+    ESP_LOGI("atilla_storage", "SERVICE 5/8 reopen and verify 8 x 512 byte reads");
+    rc = f_open(file.get(),filename,FA_READ);
+    if(rc!=FR_OK) return false;
+    const bool right_size = f_size(file.get())==4096;
+    uint32_t actual_crc=0xffffffffU;
+    bool read_ok=right_size;
+    for(unsigned block=0;block<8&&read_ok;++block) {
+      UINT got=0;
+      const FRESULT rd=f_read(file.get(),buffer.get(),512,&got);
+      if(rd!=FR_OK||got!=512){read_ok=false;break;}
+      for(unsigned i=0;i<512;++i) {
+        actual_crc ^= buffer[i];
+        for(unsigned bit=0;bit<8;++bit)
+          actual_crc=(actual_crc>>1)^((actual_crc&1U)?0xedb88320U:0U);
+      }
+    }
+    actual_crc ^= 0xffffffffU;
+    const FRESULT read_close_rc=f_close(file.get());
+    const bool verified=read_ok&&read_close_rc==FR_OK&&actual_crc==expected_crc;
+    ESP_LOGI("atilla_storage", "SERVICE 6/8 CRC expected=%08" PRIX32 " actual=%08" PRIX32 " %s",
+             expected_crc,actual_crc,verified?"PASS":"FAIL");
+    if(!verified) return false; // Retain failed test file for inspection.
+    ESP_LOGI("atilla_storage", "SERVICE 7/8 remove only VERIFY.BIN");
+    const FRESULT del_rc=f_unlink(filename);
+    if(del_rc!=FR_OK)return false;
+    auto info=std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+    if(!info)return false;
+    const FRESULT stat_rc=f_stat(filename,info.get());
+    const bool ok=stat_rc==FR_NO_FILE;
+    ESP_LOGI("atilla_storage", "SERVICE 8/8 %s: 4096 bytes, folder /ATILLA preserved, min-free-stack=%u",
+             ok?"PASS":"FAIL",unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    return ok;
+  }
   bool run_batched_write_roundtrip() {
     // May alter FAT allocation/directory sectors. Test with disposable/backup card.
     // A fixed, unique file name prevents overwriting existing user data.
