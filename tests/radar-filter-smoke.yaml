@@ -40,7 +40,7 @@ online_image:
   - id: radar_test
     url: "https://example.com/placeholder-radar.png"
     format: PNG
-    type: RGB
+    type: RGB565
     transparency: alpha_channel
     resize: 256x256
     update_interval: never
