@@ -1,0 +1,53 @@
+esphome:
+  name: atilla-brightness-smoke
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+output:
+  - platform: ledc
+    pin: GPIO16
+    id: atilla_backlight_pwm
+
+globals:
+  - id: screen_is_asleep
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+number:
+  - platform: template
+    name: "ATILLA Display Brightness"
+    id: atilla_brightness
+    min_value: 10
+    max_value: 100
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 80
+    set_action:
+      - output.set_level:
+          id: atilla_backlight_pwm
+          level: !lambda 'return id(screen_is_asleep) ? 0.30f : x / 100.0f;'
+
+script:
+  - id: execute_screen_sleep
+    then:
+      - globals.set:
+          id: screen_is_asleep
+          value: "true"
+      - output.set_level:
+          id: atilla_backlight_pwm
+          level: 30%
+  - id: execute_screen_wake
+    then:
+      - output.set_level:
+          id: atilla_backlight_pwm
+          level: !lambda 'return (isnan(id(atilla_brightness).state) ? 0.80f : id(atilla_brightness).state / 100.0f);'
+      - globals.set:
+          id: screen_is_asleep
+          value: "false"
