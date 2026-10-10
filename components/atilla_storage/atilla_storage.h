@@ -203,6 +203,7 @@ class AtillaStorage : public Component {
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
+  void set_settings_persistence_probe(bool enabled) { settings_persistence_probe_ = enabled; }
   void setup() override {
     start_ms_ = millis();
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
@@ -210,7 +211,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 16384-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -334,7 +335,10 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (storage_repeat_test_) {
+    if (settings_persistence_probe_) {
+      const bool ok = fatfs.run_settings_persistence_probe();
+      ESP_LOGI("atilla_storage", "ATILLA SETTINGS PERSISTENCE %s",ok?"PASS":"FAIL");
+    } else if (storage_repeat_test_) {
       const bool ok = fatfs.run_repeated_write_test();
       ESP_LOGI("atilla_storage", "ATILLA STORAGE REPEAT %s",ok?"PASS":"FAIL");
     } else if (storage_service_test_) {
@@ -387,6 +391,7 @@ class AtillaStorage : public Component {
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
+  bool settings_persistence_probe_{false};
 };
 } // namespace esphome::atilla_storage
 
