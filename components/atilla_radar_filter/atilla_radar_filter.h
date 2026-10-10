@@ -95,6 +95,14 @@ inline int resolve_dbz_565(uint16_t rgb) {
     case 0xfb1fu: return 62;
     case 0xfadfu: return 63;
     case 0xfa7fu: return 64;
+    case 0x630bu: return -10;
+    case 0x6b2bu: return -10;
+    case 0x6b4bu: return -10;
+    case 0x736cu: return -10;
+    case 0x738cu: return -10;
+    case 0x7b8cu: return -10;
+    case 0x7bacu: return -10;
+    case 0x7bccu: return -10;
     default: return -1;
   }
 }
@@ -138,7 +146,7 @@ inline bool apply_rain_palette(online_image::OnlineImage &img,
         ? uint16_t((uint16_t(buf[2*i])<<8)|buf[2*i+1])
         : uint16_t((uint16_t(buf[2*i+1])<<8)|buf[2*i]);
       const int dbz=resolve_dbz_565(col);
-      if (dbz<0) continue;
+      if (dbz==-1) continue;
       if (dbz<kMinimumDbz) {alpha[i]=0;}
       else {
         const uint32_t rgba=target_rgba(dbz);
