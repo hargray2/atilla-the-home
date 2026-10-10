@@ -132,7 +132,11 @@ class ReadOnlySD {
       card_.tx(0xff); card_.tx(0xfe);
       for(unsigned i=0;i<512;i++) card_.tx(in[i]);
       card_.tx(0xff);card_.tx(0xff);
-      const uint8_t response=card_.tx(0xff);
+      uint8_t response=0xff;
+      for(unsigned attempt=0;attempt<16;attempt++) {
+        response=card_.tx(0xff);
+        if((response & 0x11)==0x01) break;
+      }
       ok=(response & 0x1f)==0x05;
       if(ok) {
         bool ready=false;
