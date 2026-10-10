@@ -1,11 +1,20 @@
-# ATILLA 4.6 storage component — experimental
+# ATILLA 4.6 ESPHome storage component — compile-only
 
-The first **read-only SD SPI transport** is in [`atilla_storage.h`](./atilla_storage.h). It wraps the two ESPHome SPI devices used by ATILLA (clock-only SPI, and SD with CH422G EXIO4 CS) and supports SDHC initialization and CMD17 physical-sector reads.
+**Experimental:** checks linking of two existing SPI devices. No card reads, mounts or writes are invoked by this external component.
 
-**Not flash-ready.** The component currently has no tested runtime integration; `__init__.py` is a placeholder. No FATFS mount is implemented. There is no file creation, writing, radar asset caching or OTA firmware here. The C++ source has **not** been built in ESPHome 2026.9.1. Keep known-good ATILLA 4.5 running.
+```yaml
+external_components:
+  - source: github://hargray2/atilla-the-home@main
+    components: [atilla_storage]
 
-Hardware: SCK GPIO12, MOSI GPIO11, MISO GPIO13; SD CS on CH422G EXIO4.
+atilla_storage:
+  id: atilla_storage_46
+  card_device: atilla_sd_probe_device
+  idle_device: atilla_sd_idle_clocks
+```
 
-Next engineering milestones: register component with ESPHome, validate compilation, run nonblocking read-only tests, then implement disk-I/O adapter + FATFS mount without formatting. A properly verified write driver must come later.
+The spi_device IDs must already be defined in the YAML. Expected log, once compiled and installed: `ATILLA storage driver linked (compile-only, SD untouched)`.
 
-Only reusable public driver code belongs here—do **not** upload the private dashboard YAML, Wi-Fi password, API encryption key, or map tokens.
+**Not yet compiled or hardware-tested.** This is not a FATFS mount or functional file writer. The existing ATILLA 4.5 code remains the independent known-good read-only test.
+
+Do not publish the full private dashboard YAML or secrets.
