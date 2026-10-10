@@ -3,6 +3,7 @@
 // NOT FATFS. NOT YET COMPILE-TESTED ON ESPHome 2026.9.1.
 // Existing ESPHome SPIDevice instances handle CH422G EXIO4 chip select.
 #include <cstdint>
+#include <cinttypes>
 #include <cstring>
 #include "esphome/core/log.h"
 
@@ -72,7 +73,7 @@ class ReadOnlySD {
   }
   // Physical absolute-LBA sector read, NOT filesystem-relative.
   bool read_sector(uint32_t lba,uint8_t *out) {
-    if(!initialized_ || !out || lba>=partition_start_+partition_sectors_)return false;
+    if(!initialized_ || !out || (uint64_t(lba) >= uint64_t(partition_start_) + partition_sectors_))return false;
     card_.select();bool ok=read_selected_(lba,out);card_.deselect();return ok;
   }
   uint32_t partition_start() const {return partition_start_;}
@@ -106,9 +107,11 @@ class ReadOnlySD {
 };
 } // namespace esphome::atilla_storage
 
-// ESPHome codegen integration. No SD access during setup in this compile-only test.
+// ESPHome codegen integration: one delayed, read-only probe per boot.
+// In particular this does NOT mount FATFS or expose a write method.
 #include "esphome/core/component.h"
 #include "esphome/components/spi_device/spi_device.h"
+#include "esphome/core/hal.h"
 namespace esphome::atilla_storage {
 class AtillaStorage : public Component {
  public:
@@ -117,13 +120,40 @@ class AtillaStorage : public Component {
     idle_ = idle;
   }
   void setup() override {
-    ESP_LOGI("atilla_storage", "ATILLA storage driver linked (compile-only, SD untouched)");
+    start_ms_ = millis();
+    ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
+  }
+  void loop() override {
+    if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
+    attempted_ = true; // never repeat after a failure
+    if (card_ == nullptr || idle_ == nullptr) {
+      ESP_LOGE("atilla_storage", "Read-only probe skipped: SPI device binding absent");
+      return;
+    }
+    ReadOnlySD sd;
+    sd.bind(card_, idle_);
+    if (!sd.begin()) {
+      ESP_LOGW("atilla_storage", "Read-only SD probe FAILED; no writes attempted");
+      return;
+    }
+    uint8_t sector[512];
+    if (!sd.read_sector(sd.partition_start(), sector)) {
+      ESP_LOGW("atilla_storage", "FAT32 boot-sector read failed");
+      return;
+    }
+    const uint16_t bytes_per_sector = uint16_t(sector[11]) | uint16_t(sector[12]) << 8;
+    const uint8_t sectors_per_cluster = sector[13];
+    ESP_LOGI("atilla_storage", "READ ONLY OK partition_start=%" PRIu32 " sectors=%" PRIu32
+      " bytes_per_sector=%u sectors_per_cluster=%u", sd.partition_start(),
+      sd.partition_sectors(), bytes_per_sector, sectors_per_cluster);
   }
   void dump_config() override {
-    ESP_LOGCONFIG("atilla_storage", "ATILLA storage driver compiled; card operations DISABLED");
+    ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
   }
  protected:
   spi_device::SPIDeviceComponent *card_{nullptr};
   spi_device::SPIDeviceComponent *idle_{nullptr};
+  uint32_t start_ms_{0};
+  bool attempted_{false};
 };
 } // namespace esphome::atilla_storage
