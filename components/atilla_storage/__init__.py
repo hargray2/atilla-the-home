@@ -19,7 +19,7 @@ CONF_IDLE_DEVICE = "idle_device"
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(AtillaStorage),
     cv.Required(CONF_CARD_DEVICE): cv.use_id(spi_device.spi_device),
-    cv.Required(CONF_IDLE_DEVICE): cv.use_id(spi_device.SPIDeviceComponent),
+    cv.Required(CONF_IDLE_DEVICE): cv.use_id(spi_device.spi_device),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
