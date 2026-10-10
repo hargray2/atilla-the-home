@@ -36,7 +36,8 @@ external_components:
 atilla_radar_filter:
   id: rain_filter
 
-online_image:
+image:
+  - platform: online_image
   - id: radar_test
     url: "https://example.com/placeholder-radar.png"
     format: PNG
