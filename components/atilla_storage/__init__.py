@@ -18,13 +18,19 @@ CONF_IDLE_DEVICE = "idle_device"
 CONF_FATFS_MOUNT_TEST = "fatfs_mount_test"
 CONF_FATFS_FILE_READ_TEST = "fatfs_file_read_test"
 
-CONFIG_SCHEMA = cv.Schema({
+def validate_fatfs_test_flags(config):
+    if config[CONF_FATFS_FILE_READ_TEST] and not config[CONF_FATFS_MOUNT_TEST]:
+        raise cv.Invalid("fatfs_file_read_test requires fatfs_mount_test: true")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.GenerateID(): cv.declare_id(AtillaStorage),
     cv.Required(CONF_CARD_DEVICE): cv.use_id(spi_device.spi_device),
     cv.Required(CONF_IDLE_DEVICE): cv.use_id(spi_device.spi_device),
     cv.Optional(CONF_FATFS_MOUNT_TEST, default=False): cv.boolean,
     cv.Optional(CONF_FATFS_FILE_READ_TEST, default=False): cv.boolean,
-}).extend(cv.COMPONENT_SCHEMA)
+}).extend(cv.COMPONENT_SCHEMA), validate_fatfs_test_flags)
 
 async def to_code(config):
     # Native ESP-IDF builds exclude FatFs by default unless requested.
