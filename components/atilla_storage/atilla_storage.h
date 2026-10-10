@@ -182,8 +182,8 @@ class ReadOnlySD {
 } // namespace esphome::atilla_storage
 
 #include "fatfs_readonly.h"
-// ESPHome codegen integration: one delayed, read-only probe per boot.
-// In particular this does NOT mount FATFS or expose a write method.
+// ESPHome codegen integration: one delayed storage probe per boot.
+// Experimental storage-service mode uses a separate FreeRTOS worker stack.
 #include "esphome/core/component.h"
 #include "esphome/components/spi_device/spi_device.h"
 #include "esphome/core/hal.h"
@@ -209,6 +209,27 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
+    if (storage_service_test_) {
+      ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 16384-byte stack");
+      const BaseType_t created = xTaskCreatePinnedToCore(
+          &AtillaStorage::storage_worker_, "atilla_sd_worker",
+          16384, this, 1, nullptr, 1);
+      if (created != pdPASS)
+        ESP_LOGE("atilla_storage", "Could not create SD worker; no storage test run");
+      return;
+    }
+    run_probe_();
+  }
+  static void storage_worker_(void *parameter) {
+    auto *self = static_cast<AtillaStorage *>(parameter);
+    ESP_LOGI("atilla_storage", "SD worker started; stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    self->run_probe_();
+    ESP_LOGI("atilla_storage", "SD worker finished; stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    vTaskDelete(nullptr);
+  }
+  void run_probe_() {
     if (card_ == nullptr || idle_ == nullptr) {
       ESP_LOGE("atilla_storage", "Read-only probe skipped: SPI device binding absent");
       return;
