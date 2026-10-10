@@ -50,6 +50,19 @@ class ReadOnlyFatFs {
     mounted_ = true;
     return true;
   }
+  bool probe_file_object_allocation() {
+    // Isolates FIL construction and heap availability from f_open and f_read.
+    ESP_LOGI("atilla_storage", "FATFS FIL probe entered (no file operations)");
+    if (!mounted_) return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) {
+      ESP_LOGE("atilla_storage", "FATFS FIL probe: heap allocation FAILED");
+      return false;
+    }
+    ESP_LOGI("atilla_storage", "FATFS FIL probe PASS: heap object %u bytes, no f_open/f_read",
+             unsigned(sizeof(FIL)));
+    return true;
+  }
   bool read_known_file(uint32_t &crc, uint32_t &size) {
     // Previous device firmware rebooted before the first log in this function.
     // Keep the potentially large FatFs FIL allocation off the caller's stack.
