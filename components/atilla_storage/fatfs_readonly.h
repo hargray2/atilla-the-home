@@ -126,10 +126,44 @@ class ReadOnlyFatFs {
     const FRESULT existing_rc = f_stat(filename, existing.get());
     ESP_LOGI("atilla_storage", "SERVICE prior-file stat=%u", unsigned(existing_rc));
     if (existing_rc == FR_OK) {
-      ESP_LOGW("atilla_storage", "SERVICE VERIFY.BIN already exists (%" PRIu32 " bytes); preserving file, skipping all writes",
+      ESP_LOGW("atilla_storage", "SERVICE existing VERIFY.BIN detected (%" PRIu32 " bytes); validating read-only and preserving it",
                uint32_t(existing->fsize));
-      // Leave existing evidence in place. Distinguish this from a success.
-      return false;
+      // Previously interrupted write: do not overwrite, remove or modify it.
+      writes_active_ = false;
+      sd_.disable_test_writes();
+      if (existing->fsize != 4096 || (existing->fattrib & AM_DIR)) {
+        ESP_LOGW("atilla_storage", "SERVICE existing file has unexpected size/type; preserved without changes");
+        return false;
+      }
+      auto previous = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+      auto buf = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[512]);
+      if (!previous || !buf) return false;
+      ESP_LOGI("atilla_storage", "SERVICE existing file read-only f_open START");
+      const FRESULT open_rc = f_open(previous.get(), filename, FA_READ);
+      ESP_LOGI("atilla_storage", "SERVICE existing file f_open=%u", unsigned(open_rc));
+      if (open_rc != FR_OK) return false;
+      bool matches = true;
+      for (unsigned block = 0; block < 8; ++block) {
+        ESP_LOGI("atilla_storage", "SERVICE existing read block=%u START", block);
+        UINT got=0;
+        const FRESULT rd=f_read(previous.get(),buf.get(),512,&got);
+        ESP_LOGI("atilla_storage", "SERVICE existing read block=%u rc=%u bytes=%u",
+                 block,unsigned(rd),unsigned(got));
+        if (rd != FR_OK || got != 512) { matches=false; break; }
+        for (unsigned i=0;i<512;++i) {
+          if(buf[i] != uint8_t((block*73U+i*19U+0x5aU)&0xffU)) {
+            ESP_LOGE("atilla_storage", "SERVICE existing mismatch block=%u offset=%u", block,i);
+            matches=false;
+            break;
+          }
+        }
+        if (!matches) break;
+      }
+      const FRESULT close_rc=f_close(previous.get());
+      ESP_LOGI("atilla_storage", "SERVICE existing-file recovery %s close=%u; file preserved; task stack-min=%u bytes",
+               matches && close_rc==FR_OK ? "PASS":"FAIL",
+               unsigned(close_rc),unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+      return matches && close_rc==FR_OK;
     }
     if (existing_rc != FR_NO_FILE) {
       ESP_LOGE("atilla_storage", "SERVICE unexpected stat error=%u, refusing write", unsigned(existing_rc));
