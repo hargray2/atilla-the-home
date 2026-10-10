@@ -1,77 +1,33 @@
-# SD-card observations and validation evidence
+# SD validation — hardware evidence and scope
 
-This records successful historical **read-only** testing of the actual FAT32 microSD installed in ATILLA. It does not indicate a filesystem mount or any successful writes.
+Updated 2026-10-10. Historical detailed tests remain in Git history; this document is the consolidated current status.
 
-## Card initialization
+## Tested hardware and filesystem
 
-| Operation | Observed result |
-|---|---|
-| CMD0 | 0x01 (idle) |
-| CMD8 | 0x01, echo 000001AA |
-| ACMD41 | ready YES, final 0x00 |
-| CMD58 | 0x00, OCR C0FF8000 |
-| Addressing | Block-addressed SDHC/SDXC |
+- Waveshare ESP32-S3-Touch-LCD-7 Rev 1.2, SD SPI SCK GPIO12, MOSI GPIO11, MISO GPIO13, CH422G EXIO4 chip select.
+- FAT32 partition LBA 32768, 512-byte sectors, 64 sectors/cluster; card CSD capacity check passed.
+- Known 12-byte `WPSETT~1.DAT` content was read with CRC32 `630105D1`, repeatedly and without modification.
+- Opt-in FatFs `f_mount` and unmount returned success on-device.
+- An experimental bounded file creation/write/sync/read/delete round trip succeeded.
+- Persistent settings probe: existing `ATILLA/SETT01.TST` test record was located and validated across boots **read-only**.
 
-## MBR and FAT32
-
-| Property | Observed |
-|---|---|
-| MBR partition type | 0x0C (FAT32 LBA) |
-| Partition start LBA | 32768 |
-| Sector size | 512 B |
-| Sectors/cluster | 64 |
-| FAT copies | 2 |
-| Reserved sectors | 32 |
-| Reported volume | 59.61 GiB |
-| Root directory cluster | 2 |
-| Root directory LBA | 63314 |
-
-The directory entry `SYSTEM~1` was encountered at root. In its subdirectory, `WPSETT~1.DAT` was found as a 12-byte file at cluster 4 / LBA 63442. Its 12-byte contents were read repeatedly and the measured CRC32 was **630105D1**.
-
-## What is verified
-
-- The electrical SPI path, CS expander behavior and CMD17 path have successfully read multiple physical sectors.
-- A FAT32 volume layout and directory data were parsed without mounting.
-
-## What is not verified
-
-- ESP-IDF FATFS registration and mount
-- File opens through a mounted filesystem
-- Block writes (CMD24) or read-back from an ATILLA-created file
-- FAT metadata consistency under power loss
-- Wi-Fi persistent asset storage
-
-## Safety gates
-
-1. Compile external component against the actual installed ESPHome version.
-2. Confirm read-only mount; compare directory listing and file CRC to evidence above.
-3. Keep formatting disabled; no `f_mkfs`.
-4. Resolve SPI contention, timeout, scheduling and stack/RAM concerns.
-5. Only then implement bounded writes and a controlled test-file create/read-back.
-
-## ATILLA 4.6 GitHub component on-device confirmation (2026-10-09)
-
-The user installed the external-component firmware successfully and supplied ESPHome runtime logs confirming the *new* `atilla_storage` code path:
+## Example on-device evidence (4.7.8c boot)
 
 ```text
-[I][atilla_storage:071]: SDHC/FAT32 read-only init: PASS
-[I][atilla_storage:146]: READ ONLY OK partition_start=32768 sectors=125009920 bytes_per_sector=512 sectors_per_cluster=64
-[W][component:419]: atilla_storage took a long time for an operation (144 ms), max is 50 ms
+SDHC/FAT32 read-only init: PASS
+FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=630105D1
+FATFS f_mount result=0
+FATFS READ-ONLY MOUNT PASS
+SD CSD verified ... status=PASS
+SETTINGS PERSISTENCE PASS (existing record across boot; read-only)
+ATILLA SETTINGS PERSISTENCE PASS
+FATFS f_unmount result=0
 ```
 
-The separate legacy YAML read-only diagnostic also succeeded and read the known file `WPSETT~1.DAT` (12 bytes, CRC32 `630105D1`). This distinction matters: the **GitHub driver** currently checks card init, MBR, and FAT32 boot-sector geometry, while the **legacy YAML** reads directory entries and actual file data.
+One-shot SD worker stack minimum-free remained about 9 KiB on the logged boot. A successful test-record read after reboot is a real persistence result, **not yet** evidence of a general-purpose fault-tolerant settings system.
 
-The same boot completed radar tile retrieval and reported approximately **4,763 kB free PSRAM**, around 99 kB free internal heap and 31 kB largest internal heap block. These observations support a working boot, not FATFS mount or write capability. The new driver remains read-only and does not expose a filesystem API.
+## Boundaries and safety
 
-## 2026-10-09 — GitHub component file-content CRC verified on hardware
+The public `main` component is still a conservative read-only driver. Advanced FatFs/persistence operations reside on experimental branches; do not infer that updating documentation promotes them to `main`. Full firmware remains private.
 
-Following an OTA installation, the user provided these new runtime logs from the **external `atilla_storage` component**:
-
-```text
-[22:56:01.505][I][atilla_storage:071]: SDHC/FAT32 read-only init: PASS
-[22:56:01.552][I][atilla_storage:146]: READ ONLY OK partition_start=32768 sectors=125009920 bytes_per_sector=512 sectors_per_cluster=64
-[22:56:01.682][I][atilla_storage:217]: FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=630105D1
-[22:56:01.688][W][component:419]: atilla_storage took a long time for an operation (272 ms), max is 50 ms
-```
-
-**Verified:** the GitHub component can locate the known 8.3 directory and file entries, read the known file's bytes, and reproduce the legacy YAML CRC32. **Not verified:** an ESP-IDF FATFS mount, generic file APIs, SD writes, persistent image cache. The 272 ms loop blocking warning is a priority before sustained file I/O.
+Not yet validated: endurance, atomic replacement under sudden power loss, corruption recovery, FAT exhaustion, card-removal handling, many simultaneous files, full radar asset caching, automatic formatting (forbidden). Preserve test records and never overwrite/create them merely to rerun an existing-record verification.
