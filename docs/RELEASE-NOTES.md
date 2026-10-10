@@ -1,27 +1,25 @@
-# ATILLA release notes (v4 onward)
+# ATILLA release notes — v4 onward
 
-> Historic observations transcribed from project development. Experimental labels do not imply successful installation.
+Only on-device observations are treated as verified; candidate labels and parse/compile passes do not imply hardware success.
 
-| Version | Historical outcome |
+| Revision | Status / observed result |
 |---|---|
-| 4.0.3 | Experimental large root directory scan; OTA rollback observed. |
-| 4.0.4 | Conservative one-sector delayed SD test succeeded. |
-| 4.0.5–4.2 | Read-only FAT32 diagnostics improved; directory and file CRC checks became repeatable. |
-| 4.2.1 | SD diagnostic delay reduced to around ten seconds and worked in testing. |
-| 4.3 | Paced map/radar downloads to improve TLS reliability. |
-| 4.4 | Added heap/PSRAM memory diagnostics. |
-| 4.5 | Added post-radar memory guard; retained stable, RAM-preloaded 12-tile map/radar and read-only SD test. |
-| 4.6 (in development) | GitHub ESPHome external component, SPI bindings and first source fixes. A successful full build and a filesystem mount are **not yet confirmed**. |
+| 4.0.3 | Experimental directory scan followed by OTA rollback; root cause not established. |
+| 4.0.4–4.2.1 | Bounded FAT32 read-only checks, directory traversal and known-file CRC refined. |
+| 4.3–4.5 | Radar pacing, memory diagnostics and 12-tile map/radar baseline. |
+| 4.6.x | External SD component and FAT32 read-only checks hardware-tested. |
+| 4.7.0–4.7.1a | FatFs object allocation, file open/read, CRC and mount/unmount tested. |
+| 4.7.2 (storage stage) | Controlled test file create/write/sync/read/delete, plus later cross-boot settings record validation on experimental branch. |
+| 4.7.3 | Existing radar pipeline functional; multi-second dispatch blocking persisted. |
+| 4.7.4 | Timing confirmed six radar URL dispatches individually blocked ~3.1–3.5 s. |
+| 4.7.5c | Independent FreeRTOS HTTPS worker returned HTTP 200 in ~3.9 s; main-loop multi-second wait avoided for that probe. |
+| 4.7.6 | Full PNG downloaded to temporary bounded PSRAM buffer and validated at file-boundary level. |
+| 4.7.7 | Queue transferred worker PNG ownership to main loop; 256×256 PNG handoff/cleanup validated. |
+| 4.7.8a | Decoder experiment: compilation failed due to lambda-local PNGLE declarations. |
+| 4.7.8b | Compiled/ran; PNGLE decoder allocation unavailable. |
+| 4.7.8c | Allocation isolated: `pngle_new()` failed, frame allocation intentionally skipped; no decode success. |
+| 4.7.8d | Candidate PSRAM PNGLE decoder allocation; hardware **not yet verified**. |
 
-Pre-v4 releases are intentionally excluded. This is not a complete chronological changelog; it records milestones for which development evidence exists.
+**Version policy (effective from 4.7.8):** alphabetic suffixes mark experiments, fixes and diagnostics. Do not advance numeric revision until the relevant function has been verified on hardware and accepted.
 
-## Hardware-verified October 2026 milestones
-
-| Revision | Observed on ATILLA hardware |
-|---|---|
-| 4.6.x | SDHC/FAT32 read-only init, known-file raw-sector CRC32, and FatFs mount/unmount passed. |
-| 4.7.0 | Heap-backed 4,136-byte FatFs file object allocated; stack watermark around 894 bytes; no file opened in this stage. |
-| 4.7.1a | FatFs file open, 12-byte read, CRC32 `630105D1`, directory scan and clean unmount passed. |
-| 4.7.2 | SD card CSD capacity verified; `ATILLA.TST` created without overwrite, 28 bytes written/synced, re-read and verified, then deleted and deletion verified. |
-
-These results are supported by user-supplied real-device logs. Production persistence, filesystem endurance, recovery from power interruption and larger-file operation remain unverified. The full device YAML is intentionally private.
+The private device YAML and secrets are not stored in this public repository. None of the worker experiments yet replaced the original radar display data path; runtime blocking in `online_image` persists.
