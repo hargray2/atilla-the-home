@@ -35,3 +35,4 @@ atilla_storage:
   id: atilla_storage_46
   card_device: atilla_sd_probe_device
   idle_device: atilla_sd_idle_clocks
+  fatfs_mount_test: true
