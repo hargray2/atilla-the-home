@@ -6,6 +6,7 @@ on:
     paths:
       - "components/atilla_radar_filter/**"
       - "tests/radar-filter-smoke.yaml"
+      - "tests/radar_palette_selftest.py"
       - ".github/workflows/radar-filter-smoke.yml"
   workflow_dispatch:
 
@@ -20,6 +21,8 @@ jobs:
           python-version: "3.12"
       - name: Install ESPHome 2026.9.1
         run: pip install "esphome==2026.9.1"
+      - name: Check official palette mapping and cutoffs
+        run: python tests/radar_palette_selftest.py
       - name: Validate isolated test YAML
         run: esphome config tests/radar-filter-smoke.yaml
       - name: Compile radar filter adapter
