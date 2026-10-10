@@ -23,7 +23,7 @@ class ReadOnlyFatFs {
     if (chosen >= FF_VOLUMES) return false;
     drive_ = chosen;
     active_ = this;
-    const ff_diskio_impl_t io = {
+    static const ff_diskio_impl_t io = {
       .init = &disk_init_,
       .status = &disk_status_,
       .read = &disk_read_,
