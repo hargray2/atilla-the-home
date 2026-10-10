@@ -14,3 +14,14 @@
 | 4.6 (in development) | GitHub ESPHome external component, SPI bindings and first source fixes. A successful full build and a filesystem mount are **not yet confirmed**. |
 
 Pre-v4 releases are intentionally excluded. This is not a complete chronological changelog; it records milestones for which development evidence exists.
+
+## Hardware-verified October 2026 milestones
+
+| Revision | Observed on ATILLA hardware |
+|---|---|
+| 4.6.x | SDHC/FAT32 read-only init, known-file raw-sector CRC32, and FatFs mount/unmount passed. |
+| 4.7.0 | Heap-backed 4,136-byte FatFs file object allocated; stack watermark around 894 bytes; no file opened in this stage. |
+| 4.7.1a | FatFs file open, 12-byte read, CRC32 `630105D1`, directory scan and clean unmount passed. |
+| 4.7.2 | SD card CSD capacity verified; `ATILLA.TST` created without overwrite, 28 bytes written/synced, re-read and verified, then deleted and deletion verified. |
+
+These results are supported by user-supplied real-device logs. Production persistence, filesystem endurance, recovery from power interruption and larger-file operation remain unverified. The full device YAML is intentionally private.
