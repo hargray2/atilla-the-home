@@ -2,7 +2,7 @@ name: FATFS compile-only smoke test
 
 on:
   push:
-    branches: [dev/fatfs-readonly, dev/fatfs-write-test]
+    branches: [dev/fatfs-readonly, dev/fatfs-write-test, dev/storage-service]
     paths:
       - "components/atilla_storage/**"
       - "tests/fatfs-smoke.yaml"
