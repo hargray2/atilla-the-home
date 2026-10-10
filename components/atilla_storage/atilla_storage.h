@@ -76,6 +76,17 @@ class ReadOnlySD {
     if(!initialized_ || !out || (uint64_t(lba) >= uint64_t(partition_start_) + partition_sectors_))return false;
     card_.select();bool ok=read_selected_(lba,out);card_.deselect();return ok;
   }
+  // Physical-card reads for FatFs: the MBR at LBA 0 must be accessible.
+  bool read_physical_sector(uint32_t lba, uint8_t *out) {
+    if (!initialized_ || !out || uint64_t(lba) >= physical_sector_limit()) return false;
+    card_.select();
+    bool ok = read_selected_(lba, out);
+    card_.deselect();
+    return ok;
+  }
+  uint64_t physical_sector_limit() const {
+    return uint64_t(partition_start_) + partition_sectors_;
+  }
   uint32_t partition_start() const {return partition_start_;}
   uint32_t partition_sectors() const {return partition_sectors_;}
   bool initialized() const {return initialized_;}
