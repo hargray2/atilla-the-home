@@ -9,3 +9,12 @@ Safety: no format call, all block writes return `RES_WRPRT`, no production YAML 
 **Known unverified details:** exact ESP-IDF `diskio_impl_t` typedef/callback signatures and available FatFs symbols under ESPHome 2026.9.1; linking/build setup; volume selection behavior; mounting an MBR-partitioned 64GB card; concurrency with existing YAML probe; stack usage and main-loop blocking. The known 12-byte file path and CRC are test targets, not a successful mount report.
 
 Before enabling the adapter, validate the source using the user's exact ESPHome and ESP-IDF versions, resolve errors, avoid simultaneous raw SPI users, and ensure a bounded/nonblocking operational path. The production component continues to use its proven read-only directory/CRC verification.
+
+## 2026-10-09 adapter hardening
+
+- Added a guarded physical-LBA read path (the existing application read interface was limited to the partition and would not allow an MBR read at LBA 0).
+- Corrected status reporting to include `STA_PROTECT`; read callbacks now test specifically for `STA_NOINIT` rather than treating write protection as an I/O failure.
+- Ensured the static disk-I/O callback dispatch table has sufficient lifetime; improved cleanup and error handling.
+- No FatFs mount has been compiled or tested. The implementation is still an isolated design prototype and may require adjustments to callback types, ESP-IDF component linkage, volume configuration and stack/memory budgets before activation.
+
+**Next gate:** compile an opt-in version against the same ESP-IDF shipped with the user's ESPHome installation, without activating disk access; only then attempt a read-only filesystem mount on device. Continue to avoid every write and formatting function.
