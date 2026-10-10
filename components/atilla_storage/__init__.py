@@ -24,12 +24,13 @@ CONF_FATFS_BATCH_READ_PROBE = "fatfs_batch_read_probe"
 CONF_FATFS_WRITE_ROUNDTRIP_TEST = "fatfs_write_roundtrip_test"
 CONF_STORAGE_SERVICE_TEST = "storage_service_test"
 CONF_STORAGE_REPEAT_TEST = "storage_repeat_test"
+CONF_SETTINGS_PERSISTENCE_PROBE = "settings_persistence_probe"
 
 def validate_fatfs_test_flags(config):
     active = sum(bool(config[key]) for key in (
         CONF_FATFS_ENTRY_PROBE, CONF_FATFS_FIL_HEAP_PROBE,
         CONF_FATFS_OPEN_ONLY_PROBE, CONF_FATFS_BATCH_READ_PROBE,
-        CONF_FATFS_WRITE_ROUNDTRIP_TEST, CONF_STORAGE_SERVICE_TEST, CONF_STORAGE_REPEAT_TEST,
+        CONF_FATFS_WRITE_ROUNDTRIP_TEST, CONF_STORAGE_SERVICE_TEST, CONF_STORAGE_REPEAT_TEST, CONF_SETTINGS_PERSISTENCE_PROBE,
         CONF_FATFS_FILE_READ_TEST))
     if active > 1:
         raise cv.Invalid("Only one FatFs test mode may be enabled at a time")
@@ -50,6 +51,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Optional(CONF_FATFS_WRITE_ROUNDTRIP_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_SERVICE_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_REPEAT_TEST, default=False): cv.boolean,
+    cv.Optional(CONF_SETTINGS_PERSISTENCE_PROBE, default=False): cv.boolean,
 }).extend(cv.COMPONENT_SCHEMA), validate_fatfs_test_flags)
 
 async def to_code(config):
@@ -70,3 +72,4 @@ async def to_code(config):
     cg.add(var.set_fatfs_write_roundtrip_test(config[CONF_FATFS_WRITE_ROUNDTRIP_TEST]))
     cg.add(var.set_storage_service_test(config[CONF_STORAGE_SERVICE_TEST]))
     cg.add(var.set_storage_repeat_test(config[CONF_STORAGE_REPEAT_TEST]))
+    cg.add(var.set_settings_persistence_probe(config[CONF_SETTINGS_PERSISTENCE_PROBE]))
