@@ -18,3 +18,11 @@ Before enabling the adapter, validate the source using the user's exact ESPHome 
 - No FatFs mount has been compiled or tested. The implementation is still an isolated design prototype and may require adjustments to callback types, ESP-IDF component linkage, volume configuration and stack/memory budgets before activation.
 
 **Next gate:** compile an opt-in version against the same ESP-IDF shipped with the user's ESPHome installation, without activating disk access; only then attempt a read-only filesystem mount on device. Continue to avoid every write and formatting function.
+
+## API review (2026-10-09)
+
+Reviewed ESP-IDF disk-I/O declarations: `ff_diskio_impl_t` expects `init/status/read/write/ioctl` callbacks and `ff_diskio_get_drive(BYTE*)` selects an unused logical drive. `ff_diskio_register` copies the callback table. The prototype's callback types match the current documented interface in principle, but compile behavior in the **actual** ESPHome-linked ESP-IDF build remains unverified.
+
+Corrected a malformed escaped-newline block in `unmount()`. The prototype reports `STA_PROTECT` to FatFs and rejects all write callbacks with `RES_WRPRT` (read callbacks must therefore test the `STA_NOINIT` bit rather than treating any nonzero status as failure).
+
+**Open engineering risks:** This code is not included in firmware. Before testing a mount, confirm CMake/IDF fatfs component dependency, real `FF_VOLUMES` mapping and FAT32 partition autodetection, lifetime after mount failure, concurrency with existing raw SD code, bounded 512-byte buffers, and watchdog-friendly scheduling. Never call `f_mkfs`.
