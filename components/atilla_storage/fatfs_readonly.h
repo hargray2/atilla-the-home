@@ -69,6 +69,33 @@ class ReadOnlyFatFs {
              unsigned(uxTaskGetStackHighWaterMark(nullptr)));
     return true;
   }
+  bool probe_existing_file_open_only() {
+    // Distinct stage after heap allocation success: DO NOT read file contents.
+    // Still experimental: f_open can consume stack and previously correlated with reboot.
+    ESP_LOGI("atilla_storage", "FATFS OPEN-ONLY probe entered, stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    if (!mounted_) return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) {
+      ESP_LOGE("atilla_storage", "FATFS OPEN-ONLY heap allocation failed");
+      return false;
+    }
+    char pathname[80];
+    std::snprintf(pathname, sizeof(pathname), "%s/SYSTEM~1/WPSETT~1.DAT", drive_path_);
+    ESP_LOGI("atilla_storage", "FATFS OPEN-ONLY before f_open; stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    const uint32_t started = millis();
+    const FRESULT rc = f_open(file.get(), pathname, FA_READ);
+    ESP_LOGI("atilla_storage", "FATFS OPEN-ONLY f_open result=%u elapsed=%" PRIu32
+             " ms, stack minimum-free=%u bytes",
+             unsigned(rc), uint32_t(millis() - started),
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    if (rc != FR_OK) return false;
+    const FRESULT close_rc = f_close(file.get());
+    ESP_LOGI("atilla_storage", "FATFS OPEN-ONLY f_close result=%u; no f_read attempted",
+             unsigned(close_rc));
+    return close_rc == FR_OK;
+  }
   bool read_known_file(uint32_t &crc, uint32_t &size) {
     // Previous device firmware rebooted before the first log in this function.
     // Keep the potentially large FatFs FIL allocation off the caller's stack.
