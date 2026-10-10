@@ -38,7 +38,7 @@ atilla_radar_filter:
 
 image:
   - platform: online_image
-  - id: radar_test
+    id: radar_test
     url: "https://example.com/placeholder-radar.png"
     format: PNG
     type: RGB565
