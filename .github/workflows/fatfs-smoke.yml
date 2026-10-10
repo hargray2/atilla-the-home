@@ -1,0 +1,26 @@
+name: FATFS compile-only smoke test
+
+on:
+  push:
+    branches: [dev/fatfs-readonly]
+    paths:
+      - "components/atilla_storage/**"
+      - "tests/fatfs-smoke.yaml"
+      - ".github/workflows/fatfs-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ESPHome 2026.9.1
+        run: pip install "esphome==2026.9.1"
+      - name: Validate isolated non-private test YAML
+        run: esphome config tests/fatfs-smoke.yaml
+      - name: Compile FATFS adapter (no mounting, no SD writes)
+        run: esphome compile tests/fatfs-smoke.yaml
