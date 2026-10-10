@@ -62,3 +62,16 @@ The user installed the external-component firmware successfully and supplied ESP
 The separate legacy YAML read-only diagnostic also succeeded and read the known file `WPSETT~1.DAT` (12 bytes, CRC32 `630105D1`). This distinction matters: the **GitHub driver** currently checks card init, MBR, and FAT32 boot-sector geometry, while the **legacy YAML** reads directory entries and actual file data.
 
 The same boot completed radar tile retrieval and reported approximately **4,763 kB free PSRAM**, around 99 kB free internal heap and 31 kB largest internal heap block. These observations support a working boot, not FATFS mount or write capability. The new driver remains read-only and does not expose a filesystem API.
+
+## 2026-10-09 — GitHub component file-content CRC verified on hardware
+
+Following an OTA installation, the user provided these new runtime logs from the **external `atilla_storage` component**:
+
+```text
+[22:56:01.505][I][atilla_storage:071]: SDHC/FAT32 read-only init: PASS
+[22:56:01.552][I][atilla_storage:146]: READ ONLY OK partition_start=32768 sectors=125009920 bytes_per_sector=512 sectors_per_cluster=64
+[22:56:01.682][I][atilla_storage:217]: FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=630105D1
+[22:56:01.688][W][component:419]: atilla_storage took a long time for an operation (272 ms), max is 50 ms
+```
+
+**Verified:** the GitHub component can locate the known 8.3 directory and file entries, read the known file's bytes, and reproduce the legacy YAML CRC32. **Not verified:** an ESP-IDF FATFS mount, generic file APIs, SD writes, persistent image cache. The 272 ms loop blocking warning is a priority before sustained file I/O.
