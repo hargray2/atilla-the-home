@@ -143,8 +143,9 @@ class ReadOnlyFatFs {
     const FRESULT unlink_rc=f_unlink(pathname);
     ESP_LOGI("atilla_storage", "WRITE BATCH delete=%u",unsigned(unlink_rc));
     if(unlink_rc != FR_OK) return false;
-    FILINFO info{};
-    const FRESULT stat_rc=f_stat(pathname,&info);
+    auto info=std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+    if(!info) return false;
+    const FRESULT stat_rc=f_stat(pathname,info.get());
     ESP_LOGI("atilla_storage", "WRITE BATCH 7/7 verify removal stat=%u expected=%u",
              unsigned(stat_rc),unsigned(FR_NO_FILE));
     const bool ok=(stat_rc==FR_NO_FILE);
