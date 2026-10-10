@@ -38,4 +38,5 @@ atilla_storage:
   fatfs_mount_test: true
   fatfs_file_read_test: false
   fatfs_entry_probe: false
-  fatfs_fil_heap_probe: true
+  fatfs_fil_heap_probe: false
+  fatfs_open_only_probe: true
