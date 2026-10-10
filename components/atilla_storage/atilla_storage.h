@@ -239,3 +239,7 @@ class AtillaStorage : public Component {
   bool attempted_{false};
 };
 } // namespace esphome::atilla_storage
+
+// DEV BRANCH ONLY: parse and compile the FatFs adapter without constructing
+// an adapter, registering disk I/O, mounting a volume, or reading the card.
+#include "fatfs_readonly.h"
