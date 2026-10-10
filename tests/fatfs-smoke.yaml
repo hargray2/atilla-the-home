@@ -42,4 +42,5 @@ atilla_storage:
   fatfs_open_only_probe: false
   fatfs_batch_read_probe: false
   fatfs_write_roundtrip_test: false
-  storage_service_test: true
+  storage_service_test: false
+  storage_repeat_test: true
