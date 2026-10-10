@@ -2,7 +2,7 @@ name: FATFS compile-only smoke test
 
 on:
   push:
-    branches: [dev/fatfs-readonly]
+    branches: [dev/fatfs-readonly, dev/fatfs-write-test]
     paths:
       - "components/atilla_storage/**"
       - "tests/fatfs-smoke.yaml"
@@ -22,5 +22,5 @@ jobs:
         run: pip install "esphome==2026.9.1"
       - name: Validate isolated non-private test YAML
         run: esphome config tests/fatfs-smoke.yaml
-      - name: Compile FATFS adapter (no mounting, no SD writes)
+      - name: Compile FATFS adapter (CI only; no physical SD access)
         run: esphome compile tests/fatfs-smoke.yaml
