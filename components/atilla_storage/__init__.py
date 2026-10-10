@@ -6,7 +6,7 @@ No filesystem mount or writes are enabled.
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
-from esphome.components import spi_device
+from esphome.components import spi_device, esp32
 
 DEPENDENCIES = ["spi_device"]
 
@@ -23,6 +23,9 @@ CONFIG_SCHEMA = cv.Schema({
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
+    # Native ESP-IDF builds exclude FatFs by default unless requested.
+    esp32.include_builtin_idf_component("fatfs")
+    esp32.require_fatfs()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     card = await cg.get_variable(config[CONF_CARD_DEVICE])
