@@ -1,0 +1,26 @@
+name: Radar filter compile-only smoke test
+
+on:
+  push:
+    branches: [dev/radar-intensity]
+    paths:
+      - "components/atilla_radar_filter/**"
+      - "tests/radar-filter-smoke.yaml"
+      - ".github/workflows/radar-filter-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ESPHome 2026.9.1
+        run: pip install "esphome==2026.9.1"
+      - name: Validate isolated test YAML
+        run: esphome config tests/radar-filter-smoke.yaml
+      - name: Compile radar filter adapter
+        run: esphome compile tests/radar-filter-smoke.yaml
