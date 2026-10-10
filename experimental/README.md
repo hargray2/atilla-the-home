@@ -58,3 +58,23 @@ The development branch now exposes `fatfs_mount_test: true` under `atilla_storag
 Automated [GitHub Actions run 38019770335](https://github.com/hargray2/atilla-the-home/actions/runs/38019770335) **succeeded**. This run compiled the opt-in `fatfs_mount_test: true` code path with ESPHome 2026.9.1 on ESP32-S3/ESP-IDF (using fake GPIO CS pins strictly in the compile fixture). The actual Waveshare's CH422G CS is used only by the user's private full firmware.
 
 The next step is a deliberate on-device **read-only mount** trial from a full private YAML pointing to `dev/fatfs-readonly`, `refresh: 0s`, and `fatfs_mount_test: true`. The test must never be mistaken for a file-write capability. Runtime logs should distinguish `FATFS READ-ONLY MOUNT PASS`, `FATFS FILE READ`, `FATFS MOUNT FAILED`, or any boot/OTA regressions.
+
+## Hardware incident: mount PASS followed by API disconnect (2026-10-09)
+
+The user ran the opt-in FATFS 4.6.1 test on the actual Waveshare and reported:
+
+```text
+[23:30:16.196][I][atilla_storage]: SDHC/FAT32 read-only init: PASS
+[23:30:16.244][I][atilla_storage]: READ ONLY OK partition_start=32768 sectors=125009920 bytes_per_sector=512 sectors_per_cluster=64
+[23:30:16.377][I][atilla_storage]: FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=630105D1
+[23:30:16.382][I][atilla_storage]: Opt-in FATFS read-only mount starting (NO WRITES)
+[23:30:16.514][I][atilla_storage]: FATFS READ-ONLY MOUNT PASS
+INFO Processing unexpected disconnect from ESPHome API
+[23:30:46.566][E][esp32.crash]: Reason: Fault - Cache error (cause 7)
+[23:30:46.566][E][esp32.crash]: Crashed core: 0
+[23:30:46.566][E][esp32.crash]: Captured by a different firmware build
+```
+
+**What is verified:** real FATFS mount returned success on hardware. **Not verified:** FATFS file-open/read, file CRC via FATFS or safe subsequent unmount. The later crash record is from a different firmware build, so the precise crash reason cannot be conclusively attributed from that record.
+
+**Risk/mitigation:** No further 4.6.1 installation or repeated reboot is recommended. Source changed so FATFS file-open/read is disabled unless `fatfs_file_read_test: true` is explicitly provided (default false); mounting remains disabled by default unless `fatfs_mount_test: true` is requested. The current main branch is unchanged. New source must first pass CI then undergo a separately approved mount-only hardware test if safe. Consider stack use, file system object sizing, stale filesystem pointers, asynchronous I/O/concurrency and complete crash traces before enabling writes. No SD writes or formatting permitted.
