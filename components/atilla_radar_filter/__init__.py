@@ -2,7 +2,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import automation
-from esphome.components import online_image
+from esphome.components.online_image.image import OnlineImage
 from esphome.const import CONF_ID
 
 DEPENDENCIES = ["online_image"]
@@ -25,7 +25,7 @@ async def to_code(config):
     FilterAction,
     cv.Schema({
         cv.GenerateID(): cv.use_id(RadarFilter),
-        cv.Required("image_id"): cv.use_id(online_image.OnlineImage),
+        cv.Required("image_id"): cv.use_id(OnlineImage),
     }),
     synchronous=True,
 )
