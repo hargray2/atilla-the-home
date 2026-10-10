@@ -146,6 +146,9 @@ class ReadOnlyFatFs {
     ESP_LOGI("atilla_storage", "SERVICE 4/8 write 4096 bytes result=%s",write_ok?"PASS":"FAIL");
     const FRESULT sync_rc=write_ok?f_sync(file.get()):FR_DISK_ERR;
     const FRESULT close_rc=f_close(file.get());
+    ESP_LOGI("atilla_storage", "SERVICE sync=%u close=%u stack_min_free=%u",
+             unsigned(sync_rc), unsigned(close_rc),
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
     if(!write_ok||sync_rc!=FR_OK||close_rc!=FR_OK) return false;
     file.reset(new (std::nothrow) FIL{});
     if (!file) return false;
