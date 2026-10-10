@@ -96,6 +96,74 @@ class ReadOnlyFatFs {
              unsigned(close_rc));
     return close_rc == FR_OK;
   }
+  bool run_repeated_write_test() {
+    // Three distinct 512-byte files. Never overwrite or delete any pre-existing file.
+    if (!mounted_ || !sd_.verify_physical_capacity()) return false;
+    char folder[32];
+    std::snprintf(folder,sizeof(folder),"%s/ATILLA",drive_path_);
+    auto info=std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+    auto file=std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    auto block=std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[512]);
+    if (!info || !file || !block) return false;
+    FRESULT rc=f_stat(folder,info.get());
+    if (rc!=FR_OK || !(info->fattrib & AM_DIR)) {
+      ESP_LOGE("atilla_storage","REPEAT abort: /ATILLA directory missing or invalid rc=%u",unsigned(rc));
+      return false;
+    }
+    // Preflight all names BEFORE enabling writes; existing files are immutable.
+    for(unsigned round=1;round<=3;++round) {
+      char name[48];
+      std::snprintf(name,sizeof(name),"%s/ATILLA/RPT%02u.TST",drive_path_,round);
+      rc=f_stat(name,info.get());
+      if(rc!=FR_NO_FILE) {
+        ESP_LOGW("atilla_storage","REPEAT abort: test file occupied or stat failed round=%u rc=%u",round,unsigned(rc));
+        return false;
+      }
+    }
+    if(!sd_.enable_test_writes())return false;
+    writes_active_=true;
+    for(unsigned round=1;round<=3;++round) {
+      char name[48];
+      std::snprintf(name,sizeof(name),"%s/ATILLA/RPT%02u.TST",drive_path_,round);
+      for(unsigned i=0;i<512;++i)
+        block[i]=uint8_t((round*41U+i*17U+0x35U)&0xffU);
+      ESP_LOGI("atilla_storage","REPEAT %u/3 create-new 512-byte test file",round);
+      file.reset(new (std::nothrow) FIL{});
+      if(!file)return false;
+      rc=f_open(file.get(),name,FA_WRITE|FA_CREATE_NEW);
+      if(rc!=FR_OK) {ESP_LOGE("atilla_storage","REPEAT create failed=%u",unsigned(rc));return false;}
+      UINT count=0;
+      const FRESULT wr=f_write(file.get(),block.get(),512,&count);
+      const FRESULT sync=(wr==FR_OK&&count==512)?f_sync(file.get()):FR_DISK_ERR;
+      const FRESULT close=f_close(file.get());
+      ESP_LOGI("atilla_storage","REPEAT %u/3 write=%u bytes=%u sync=%u close=%u",
+               round,unsigned(wr),unsigned(count),unsigned(sync),unsigned(close));
+      if(wr!=FR_OK||count!=512||sync!=FR_OK||close!=FR_OK)return false;
+      file.reset(new (std::nothrow) FIL{});
+      if(!file)return false;
+      rc=f_open(file.get(),name,FA_READ);
+      ESP_LOGI("atilla_storage","REPEAT %u/3 reopen=%u",round,unsigned(rc));
+      if(rc!=FR_OK)return false;
+      UINT got=0;
+      const FRESULT rd=f_read(file.get(),block.get(),512,&got);
+      const FRESULT read_close=f_close(file.get());
+      bool verified=(rd==FR_OK&&got==512&&read_close==FR_OK);
+      if(verified)for(unsigned i=0;i<512;++i)
+        if(block[i]!=uint8_t((round*41U+i*17U+0x35U)&0xffU)){verified=false;break;}
+      ESP_LOGI("atilla_storage","REPEAT %u/3 verify=%s rd=%u got=%u",round,
+               verified?"PASS":"FAIL",unsigned(rd),unsigned(got));
+      if(!verified)return false; // Retain files for diagnosis after a failed round.
+      rc=f_unlink(name);
+      if(rc!=FR_OK)return false;
+      rc=f_stat(name,info.get());
+      if(rc!=FR_NO_FILE)return false;
+      ESP_LOGI("atilla_storage","REPEAT %u/3 delete confirmed; stack min-free=%u bytes",
+               round,unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+      vTaskDelay(pdMS_TO_TICKS(25));
+    }
+    ESP_LOGI("atilla_storage","REPEAT 3/3 PASS: independent 512-byte roundtrips completed");
+    return true;
+  }
   bool run_storage_service_test() {
     // Experimental 4 KiB multi-sector integrity check. No existing files overwritten.
     ESP_LOGI("atilla_storage", "SERVICE 1/8 validate SD physical capacity");
