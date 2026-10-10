@@ -34,3 +34,15 @@ A copy of the adapter now lives in `components/atilla_storage/fatfs_readonly.h` 
 The callback typedefs were cross-checked against Espressif's `components/fatfs/diskio/diskio_impl.h` in the ESP-IDF v5.5.1 source, including `ff_diskio_register` and `ff_diskio_get_drive`. This is an upstream reference only; the exact ESP-IDF version bundled in the ATILLA compile output still needs verification.
 
 **Next check:** build this branch as an opt-in experiment. It may report a missing FatFs header, unavailable FatFs dependency, a compiler-level API mismatch, or no error. Do not report the FatFs mount as functional unless the adapter has also been activated and tested on hardware. No SD writes are implemented.
+
+## GitHub Actions compile result — confirmed failure
+
+Workflow run [38019233276](https://github.com/hargray2/atilla-the-home/actions/runs/38019233276) completed. ESPHome 2026.9.1 validation **passed**, but native ESP-IDF compilation **failed** when compiling `main.cpp`:
+
+```text
+fatal error: ff.h: No such file or directory
+Compilation failed because fatfs_readonly.h (in "src" component) includes ff.h, provided by fatfs component(s).
+However, fatfs component(s) is not in the requirements list of "src".
+```
+
+This is not a missing file in the ESP-IDF SDK: the generated ESPHome `src` CMake component does not currently declare the native ESP-IDF `fatfs` requirement. A correct integration needs to add that dependency through supported ESPHome build generation rather than simply copying headers or modifying private YAML. **Do not merge to `main` or ask for an OTA install until this build gate passes.**
