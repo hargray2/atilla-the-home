@@ -14,6 +14,8 @@
 #include "diskio.h"
 #include "diskio_impl.h"
 #include "atilla_storage.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace esphome::atilla_storage::experimental {
 class ReadOnlyFatFs {
@@ -53,6 +55,8 @@ class ReadOnlyFatFs {
   bool probe_file_object_allocation() {
     // Isolates FIL construction and heap availability from f_open and f_read.
     ESP_LOGI("atilla_storage", "FATFS FIL probe entered (no file operations)");
+    ESP_LOGI("atilla_storage", "FATFS FIL probe stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t)));
     if (!mounted_) return false;
     auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
     if (!file) {
@@ -61,6 +65,8 @@ class ReadOnlyFatFs {
     }
     ESP_LOGI("atilla_storage", "FATFS FIL probe PASS: heap object %u bytes, no f_open/f_read",
              unsigned(sizeof(FIL)));
+    ESP_LOGI("atilla_storage", "FATFS FIL probe post-allocation stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t)));
     return true;
   }
   bool read_known_file(uint32_t &crc, uint32_t &size) {
