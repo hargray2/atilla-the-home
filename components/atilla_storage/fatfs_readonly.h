@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "esphome/core/hal.h"  // millis() timing diagnostics
 #include "esp_err.h"
 #include "ff.h"
 #include "diskio.h"
