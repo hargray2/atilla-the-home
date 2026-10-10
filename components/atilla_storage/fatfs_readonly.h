@@ -1,8 +1,8 @@
 #pragma once
-// EXPERIMENTAL DESIGN CANDIDATE — not included by the working component.
+// EXPERIMENTAL: development branch only; opt-in read-only FatFs interface.
 // Target: ESP-IDF FatFs custom disk I/O. All writes explicitly refused.
-// This code has not been compiled against ATILLA's ESPHome/IDF toolchain.
-// Build prerequisite: fatfs component headers and linkage must be available.
+// ESPHome 2026.9.1 CI compiled; physical-device file open unverified.
+// WARNING: no formatting or writes; do not enable unattended filesystem access.
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -49,11 +49,18 @@ class ReadOnlyFatFs {
     char pathname[80];
     std::snprintf(pathname, sizeof(pathname), "%s/SYSTEM~1/WPSETT~1.DAT", drive_path_);
     FIL file{};
-    if (f_open(&file, pathname, FA_READ) != FR_OK) return false;
+    ESP_LOGI("atilla_storage", "FATFS opening existing file (read only)");
+    const FRESULT open_rc = f_open(&file, pathname, FA_READ);
+    ESP_LOGI("atilla_storage", "FATFS f_open result=%u", unsigned(open_rc));
+    if (open_rc != FR_OK) return false;
     uint8_t buf[64] = {};
     UINT got = 0;
-    const bool ok = f_read(&file, buf, sizeof(buf), &got) == FR_OK && got == 12;
-    (void) f_close(&file);
+    ESP_LOGI("atilla_storage", "FATFS f_read starting");
+    const FRESULT read_rc = f_read(&file, buf, 12, &got);
+    ESP_LOGI("atilla_storage", "FATFS f_read result=%u bytes=%u", unsigned(read_rc), unsigned(got));
+    const FRESULT close_rc = f_close(&file);
+    ESP_LOGI("atilla_storage", "FATFS f_close result=%u", unsigned(close_rc));
+    const bool ok = read_rc == FR_OK && got == 12 && close_rc == FR_OK;
     if (!ok) return false;
     uint32_t x = 0xffffffffU;
     for (unsigned i = 0; i < got; ++i) {
