@@ -144,3 +144,7 @@ User-supplied device logs show the separate `atilla_sd_worke` task starting with
 ## 4.7.5 controlled repeat-write candidate
 
 A dedicated `dev/storage-repeat-test` branch adds `storage_repeat_test: true` as an opt-in alternative to the 4 KiB service test. It uses the existing 16 KiB low-priority FreeRTOS worker and the previously validated `/ATILLA` directory. Before enabling writes, it checks that each of `RPT01.TST`, `RPT02.TST` and `RPT03.TST` is absent. It then performs **three separate 512-byte** create-new/write/sync/close/reopen/verify/delete round trips with deterministic byte patterns and a short task yield after each success. It does **not** touch the recovered `/ATILLA/VERIFY.BIN`. On any failure, it stops without deleting the failed round's file, preserving evidence. Build success is not proof of physical SD reliability; this is still an opt-in experimental test. 
+
+## 2026-10-10 — ATILLA 4.7.5 hardware PASS
+
+Device logs demonstrate all three independent 512-byte `RPT01.TST`–`RPT03.TST` file cycles completed: each `f_write=0`, 512 bytes, `f_sync=0`, `f_close=0`, `f_open(read)=0`, `f_read=0`, 512 bytes, deterministic contents verified, delete and missing-file checks passed. FATFS unmounted, SD worker exited normally, and minimum worker stack free was 9220 bytes. Wi-Fi and sensor updates continued after completion. This validates three sequential small-file create/write/verify/delete cycles, **not** power-loss resilience, lifetime endurance, or concurrent filesystem use.
