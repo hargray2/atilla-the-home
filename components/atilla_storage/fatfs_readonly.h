@@ -34,7 +34,10 @@ class ReadOnlyFatFs {
     // FF_VOLUMES is currently capped at ten by ESP-IDF FatFs.
     std::snprintf(drive_path_, sizeof(drive_path_), "%u:", unsigned(drive_));
     // No f_mkfs! A mount failure must leave the SD untouched.
+    const uint32_t mount_started = millis();
     const FRESULT rc = f_mount(&fs_, drive_path_, 1);
+    ESP_LOGI("atilla_storage", "FATFS f_mount result=%u elapsed=%" PRIu32 " ms",
+             unsigned(rc), uint32_t(millis() - mount_started));
     if (rc != FR_OK) {
       ff_diskio_register(drive_, nullptr);
       active_ = nullptr;
@@ -50,8 +53,10 @@ class ReadOnlyFatFs {
     std::snprintf(pathname, sizeof(pathname), "%s/SYSTEM~1/WPSETT~1.DAT", drive_path_);
     FIL file{};
     ESP_LOGI("atilla_storage", "FATFS opening existing file (read only)");
+    const uint32_t open_started = millis();
     const FRESULT open_rc = f_open(&file, pathname, FA_READ);
-    ESP_LOGI("atilla_storage", "FATFS f_open result=%u", unsigned(open_rc));
+    ESP_LOGI("atilla_storage", "FATFS f_open result=%u elapsed=%" PRIu32 " ms",
+             unsigned(open_rc), uint32_t(millis() - open_started));
     if (open_rc != FR_OK) return false;
     const FSIZE_t expected_size = 12;
     const FSIZE_t actual_size = f_size(&file);
@@ -64,10 +69,14 @@ class ReadOnlyFatFs {
     uint8_t buf[12] = {};
     UINT got = 0;
     ESP_LOGI("atilla_storage", "FATFS f_read starting");
+    const uint32_t read_started = millis();
     const FRESULT read_rc = f_read(&file, buf, 12, &got);
-    ESP_LOGI("atilla_storage", "FATFS f_read result=%u bytes=%u", unsigned(read_rc), unsigned(got));
+    ESP_LOGI("atilla_storage", "FATFS f_read result=%u bytes=%u elapsed=%" PRIu32 " ms",
+             unsigned(read_rc), unsigned(got), uint32_t(millis() - read_started));
+    const uint32_t close_started = millis();
     const FRESULT close_rc = f_close(&file);
-    ESP_LOGI("atilla_storage", "FATFS f_close result=%u", unsigned(close_rc));
+    ESP_LOGI("atilla_storage", "FATFS f_close result=%u elapsed=%" PRIu32 " ms",
+             unsigned(close_rc), uint32_t(millis() - close_started));
     const bool ok = read_rc == FR_OK && got == 12 && close_rc == FR_OK;
     if (!ok) return false;
     uint32_t x = 0xffffffffU;
@@ -93,7 +102,10 @@ class ReadOnlyFatFs {
       }
       return;
     }
-    (void) f_mount(nullptr, drive_path_, 0);
+    const uint32_t unmount_started = millis();
+    const FRESULT unmount_rc = f_mount(nullptr, drive_path_, 0);
+    ESP_LOGI("atilla_storage", "FATFS f_unmount result=%u elapsed=%" PRIu32 " ms",
+             unsigned(unmount_rc), uint32_t(millis() - unmount_started));
     ff_diskio_register(drive_, nullptr);
     mounted_ = false;
     active_ = nullptr;
