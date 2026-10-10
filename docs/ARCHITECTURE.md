@@ -1,44 +1,32 @@
-# ATILLA architecture
+# ATILLA architecture — hardware-tested and experimental paths
 
-## Working firmware baseline: ATILLA 4.5
+## Hardware and UI
 
-Installed via Home Assistant ESPHome Builder from a **single** `waveshare.yaml` file, maintained on an iPhone. The ESPHome node retains the filename `waveshare.yaml`; the dashboard/project name is **ATILLA THE HOME**.
+- Waveshare ESP32-S3-Touch-LCD-7 Rev 1.2; 800×480 LVGL dashboard.
+- Display stability testing used RGB pixel clock 14 MHz.
+- Six 256×256 CARTO basemap tiles and six matching RainViewer radar tiles (zoom 6, historic x 16–18/y 25–26 arrangement).
+- Standard on-screen images use ESPHome `online_image`, decoded into RAM, then presented via LVGL on the ESPHome execution path.
 
-### UI and map
+## Main-loop limitation (measured)
 
-- ESP32-S3 drives LVGL on the 800×480 touch panel.
-- HOME view, RADAR view, on-screen zoom +/- and CENTER controls.
-- Map consists of six 256×256 CARTO dark basemap tiles, at zoom level 6, x=16–18 and y=25–26 in the historically tested arrangement.
-- RainViewer radar overlays consist of six corresponding transparent tile images.
-- Each of the 12 images is fetched using ESPHome `online_image`.
-- `on_download_finished` triggers `lvgl.image.update` so completed transfers become visible.
-- The map and overlays share zoom and pan transformations.
-- Radar tiles are preloaded while on HOME, allowing the radar view to open promptly once downloads finish.
+`online_image.set_url` performs synchronous network initialization. Radar dispatch averaged about 3.3 s per tile in 4.7.4 instrumentation, followed by independent PNG decode delays. Staggering dispatches reduces overlap but does **not** remove individual stalls. All six displayed tiles still use this original method in 4.7.8d.
 
-### Why transfers are staggered
+## Worker development sequence (private single-file YAML)
 
-Historical working pacing: ~1.5 seconds between basemap requests, ~4 seconds between radar requests. Faster bursts produced TLS handshake/connect errors, including mbedTLS resource failures. Avoid changing pacing without benchmark evidence.
+1. **4.7.5c — worker HTTPS probe:** FreeRTOS task completed HTTP 200; request ~3,892 ms, no corresponding multi-second main-loop warning (one 272 ms warning).
+2. **4.7.6 — full PNG:** worker downloaded a complete ~25 KiB PNG into a bounded 128 KiB PSRAM buffer, checked signature/end and byte count, and released memory.
+3. **4.7.7 — ownership handoff:** one-message FreeRTOS queue transferred ownership of a full 256×256 PNG to the ESPHome main loop; consumer verified metadata and released buffer.
+4. **4.7.8a–c — main-loop decoder tests:** compilation issue corrected in b; PNGLE allocation failure isolated in c. Available internal heap ~99 KiB but largest internal block ~31 KiB; contiguous PSRAM ~4.5 MiB.
+5. **4.7.8d — pending:** explicitly allocate PNGLE decoder state in PSRAM, decode into temporary RGB565 PSRAM frame, free diagnostics. No hardware result yet.
 
-### RAM versus persistence
+The worker must **never** call LVGL or ESPHome `online_image` from its own thread. Queue-owned buffers require bounded length, a single owner, timeout/error cleanup and main-loop-only rendering.
 
-Image tiles currently reside in RAM for the active boot. A reboot requires network retrieval. FAT32 sector-reading success is **not equivalent** to mounted FATFS or saved images.
+## Storage
 
-## Planned external component path
+The public `main` branch deliberately provides **read-only** raw SD transport. Advanced FatFs and persistence work exists on experimental branches and was invoked by private YAML. Do not confuse a hardware-tested experimental branch with promotion of that source to `main`.
 
-```text
-waveshare.yaml  (private, one-file installation)
-      |
-      +-- external_components: GitHub atilla_storage
-                    |
-                    +-- ESPHome codegen Python
-                    +-- C++ transport (CH422G CS)
-                    +-- future read-only FATFS disk adapter
-                    +-- future guarded write implementation
-                    +-- future asset cache / LVGL image integration
-```
+The latest settings-persistence logs repeatedly report `SETTINGS PERSISTENCE PASS (existing record across boot; read-only)`. This validates a small test record, **not** a production settings storage service, atomic updates, SD asset cache or power-failure tolerance.
 
-The transport is experimental and is **not activated for card access** by the current component's setup method. The external component has experienced Python type and C++ namespace compilation errors; their fixes are committed, but a successful subsequent build has not yet been reported.
+## Private firmware and source control
 
-## Privacy architecture
-
-The complete production YAML can contain Wi-Fi, API and map credentials. Keep it off this **public** repository. Reusable driver code, sanitized examples, logs with sensitive strings removed, and documentation belong here.
+The full `waveshare.yaml` remains outside this public repository. Documentation here summarizes test outcomes without secrets or live map URLs. Pin component branches/commits deliberately; maintain tested rollback versions.
