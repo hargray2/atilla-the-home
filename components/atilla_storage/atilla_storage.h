@@ -146,6 +146,77 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "READ ONLY OK partition_start=%" PRIu32 " sectors=%" PRIu32
       " bytes_per_sector=%u sectors_per_cluster=%u", sd.partition_start(),
       sd.partition_sectors(), bytes_per_sector, sectors_per_cluster);
+    // Bounded three-sector verification against the legacy YAML test. This is
+    // raw FAT32 directory traversal, NOT a mounted filesystem or general fopen.
+    const auto le16 = [](const uint8_t *p) -> uint16_t {
+      return uint16_t(p[0]) | (uint16_t(p[1]) << 8);
+    };
+    const auto le32 = [](const uint8_t *p) -> uint32_t {
+      return uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
+             (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
+    };
+    const uint16_t reserved = le16(sector + 14);
+    const uint8_t fat_count = sector[16];
+    const uint32_t fat_size = le32(sector + 36);
+    const uint32_t root_cluster = le32(sector + 44);
+    const uint64_t data_start = uint64_t(sd.partition_start()) + reserved +
+                                uint64_t(fat_count) * fat_size;
+    const uint64_t part_end = uint64_t(sd.partition_start()) + sd.partition_sectors();
+    if (bytes_per_sector != 512 || sectors_per_cluster == 0 ||
+        (sectors_per_cluster & (sectors_per_cluster - 1)) ||
+        fat_count == 0 || reserved == 0 || fat_size == 0 ||
+        root_cluster < 2 || data_start >= part_end) {
+      ESP_LOGW("atilla_storage", "FILE CHECK skipped: invalid FAT32 geometry");
+      return;
+    }
+    const auto cluster_lba = [&](uint32_t cluster) -> uint64_t {
+      return data_start + uint64_t(cluster - 2) * sectors_per_cluster;
+    };
+    const auto find_entry = [&](const uint8_t *buf, const char name[11],
+                                bool directory, uint32_t &cluster, uint32_t &size) -> bool {
+      for (int i = 0; i < 512; i += 32) {
+        const uint8_t *e = buf + i;
+        if (e[0] == 0x00) break;
+        if (e[0] == 0xE5 || e[11] == 0x0F || (e[11] & 0x08)) continue;
+        if ((bool(e[11] & 0x10)) != directory) continue;
+        if (memcmp(e, name, 11) != 0) continue;
+        cluster = (uint32_t(le16(e + 20)) << 16) | le16(e + 26);
+        size = le32(e + 28);
+        return cluster >= 2;
+      }
+      return false;
+    };
+    uint32_t dir_cluster = 0, ignored_size = 0;
+    const uint64_t root_lba = cluster_lba(root_cluster);
+    if (root_lba >= part_end || !sd.read_sector(uint32_t(root_lba), sector) ||
+        !find_entry(sector, "SYSTEM~1   ", true, dir_cluster, ignored_size)) {
+      ESP_LOGW("atilla_storage", "FILE CHECK: expected root directory not found");
+      return;
+    }
+    uint32_t file_cluster = 0, file_size = 0;
+    const uint64_t dir_lba = cluster_lba(dir_cluster);
+    if (dir_lba >= part_end || !sd.read_sector(uint32_t(dir_lba), sector) ||
+        !find_entry(sector, "WPSETT~1DAT", false, file_cluster, file_size)) {
+      ESP_LOGW("atilla_storage", "FILE CHECK: expected 8.3 file not found");
+      return;
+    }
+    const uint64_t file_lba = cluster_lba(file_cluster);
+    if (file_size != 12 || file_lba >= part_end ||
+        !sd.read_sector(uint32_t(file_lba), sector)) {
+      ESP_LOGW("atilla_storage", "FILE CHECK: invalid file length or sector");
+      return;
+    }
+    uint32_t crc = 0xFFFFFFFFu;
+    for (uint32_t i = 0; i < file_size; i++) {
+      crc ^= sector[i];
+      for (int bit = 0; bit < 8; bit++)
+        crc = (crc >> 1) ^ ((crc & 1u) ? 0xEDB88320u : 0u);
+    }
+    crc ^= 0xFFFFFFFFu;
+    if (crc == 0x630105D1u)
+      ESP_LOGI("atilla_storage", "FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=%08" PRIX32, crc);
+    else
+      ESP_LOGW("atilla_storage", "FILE CHECK CRC MISMATCH: got=%08" PRIX32 " expected=630105D1", crc);
   }
   void dump_config() override {
     ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
