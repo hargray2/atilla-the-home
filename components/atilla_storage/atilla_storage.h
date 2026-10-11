@@ -211,11 +211,11 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_) {
-      ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 16384-byte stack");
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_) {
+      ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
-          16384, this, 1, nullptr, 1);
+          24576, this, 1, nullptr, 1);
       if (created != pdPASS)
         ESP_LOGE("atilla_storage", "Could not create SD worker; no storage test run");
       return;
