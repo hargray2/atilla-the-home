@@ -16,10 +16,18 @@ This log distinguishes hardware-observed behavior from experimental proposals. V
 | 4.7.9q | Hardware: moved batch probe to 24,576-byte FreeRTOS worker; ~17,428 bytes minimum stack free; main-loop storage warning absent |
 | 4.7.9r | Hardware: weather networking moved into workers; weather TLS/validation FAILED; other subsystems passed |
 | 4.7.9s | Hardware: serialized HTTPS; weather received 200 bodies but FAIL due to response-length handling |
+| **4.7.9y** | **Latest hardware-validated startup:** one worker combines directory discovery, two-pass 4KiB CRC, and reusable bounded read-only asset reader; weather, CARTO and six radar tiles PASS. No writes; see advisories. |
+| 4.7.9x | Combined read-only diagnostic candidate, subsumed by the 4.7.9y hardware test |
+| 4.7.9w | Hardware-validated bounded two-pass 4KiB CRC reader |
+| 4.7.9v | Hardware-validated /ATILLA directory discovery |
 | **4.7.9u** | **Latest hardware-validated startup checkpoint:** consolidated SHA-pinned storage+radar components, weather current+forecast, all 6 CARTO and radar tiles, read-only FatFs batch PASS; see advisories below |
 | 4.7.9t | **Hardware-validated checkpoint:** both weather workers PASS with LIVE / UPDATED, six CARTO basemap tiles, six RainViewer radar tiles, read-only FatFs batch PASS; ~4,895 kB PSRAM and ~100 kB internal heap free after startup |
 
-## Release advisories — 4.7.9u
+## Release advisories — 4.7.9y
+
+See [4.7.9y hardware acceptance](VALIDATED-BASELINE-4.7.9y.md). This is **initial hardware validation**, not a long soak. Verified /ATILLA entries, repeated 4KiB file CRC and a reusable read-only asset reader against the *observed*, not independently trusted, checksum `5ACE03B3`. No SD writes or LVGL file asset rendering, no preemptive filesystem I/O timeout, and recurring image-processing delays (~176–391 ms). Keep previous complete private releases for rollback; full firmware is never published.
+
+## Previous release advisories — 4.7.9u
 
 - **Validation scope:** The observed device log confirms compilation, boot and core subsystem startup over roughly two minutes, **not** long-duration stability, all touchscreen controls, offline recovery or sustained radar refresh cycles.
 - **API reconnect:** ESPHome's initial API attempt reported `SocketClosedAPIError` / EOF. A subsequent connection and encrypted handshake succeeded. The cause was not established; monitor for recurring connection loss.
