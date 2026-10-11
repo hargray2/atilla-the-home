@@ -12,12 +12,12 @@ Checkpoint: private single-file firmware 4.7.9t; external SD component worker ve
 
 ## Required before integrating a fully reproducible private build
 - [ ] Sanitize full `waveshare.yaml` to generate a **public example without any secrets**, if desired; the canonical complete private YAML remains outside GitHub.
-- [ ] Inventory custom ESPHome components referenced by the private YAML, including radar filter and other optional components. The repo currently includes storage only on this branch.
-- [ ] Use pinned Git commit SHAs or release tags for component versions; floating development branches may change under a known-good firmware.
+- [x] Import and inventory the two known external components (`atilla_storage`, `atilla_radar_filter`) in this overhaul branch; confirm any additional component references against the complete private YAML before release.
+- [x] Record immutable verified *source* commit SHAs in `release/components-4.7.9t.lock.json`. [ ] Update the **private YAML itself** to use pinned references only after separate full-configuration compilation and device testing.
 - [ ] Decide how to retain private full firmware backups and release artifacts separately from the public repo.
 - [ ] Add validation tests for production-equivalent Waveshare SPI/CH422G wiring (without connecting physical hardware in CI).
 - [ ] Add bounded read-only asset discovery/streaming tests before implementing UI SD assets.
-- [ ] Record successful Actions compile, panel OTA and longer hardware soak for each promoted release.
+- [x] Record 4.7.9t's observed panel compile, OTA/boot and early runtime acceptance. [ ] Capture full overhaul-branch Actions pass and run a longer panel soak before promotion.
 
 ## CI truth table
 A green compile fixture means the *storage adapter* compiles for a generic ESP32-S3 test target. It does not prove the full private dashboard compiles or runs. Card operations in the fixture cannot validate the real Waveshare SD wiring. Never flash the CI fixture to the panel.
