@@ -442,6 +442,51 @@ class ReadOnlyFatFs {
              ok?"PASS":"FAIL",unsigned(uxTaskGetStackHighWaterMark(nullptr)));
     return ok;
   }
+  // Opt-in discovery only. No file data reads, no writes, no SD formatting.
+  // Must execute from the existing dedicated SD worker with FatFs mounted.
+  bool run_asset_discovery_read_only() {
+    if (!mounted_) return false;
+    auto dir = std::unique_ptr<FF_DIR>(new (std::nothrow) FF_DIR{});
+    auto info = std::unique_ptr<FILINFO>(new (std::nothrow) FILINFO{});
+    if (!dir || !info) {
+      ESP_LOGE("atilla_storage", "ASSET DISCOVERY FAIL: directory allocation");
+      return false;
+    }
+    char path[32];
+    std::snprintf(path, sizeof(path), "%s/ATILLA", drive_path_);
+    FRESULT rc = f_opendir(dir.get(), path);
+    if (rc != FR_OK) {
+      ESP_LOGW("atilla_storage", "ASSET DISCOVERY FAIL: /ATILLA unavailable rc=%u (no changes)",
+               unsigned(rc));
+      return false;
+    }
+    constexpr unsigned kMaxEntries = 32;
+    unsigned entries = 0;
+    unsigned files = 0;
+    bool complete = false;
+    bool ok = true;
+    for (; entries < kMaxEntries; ++entries) {
+      std::memset(info.get(), 0, sizeof(FILINFO));
+      rc = f_readdir(dir.get(), info.get());
+      if (rc != FR_OK) { ok = false; break; }
+      if (info->fname[0] == 0) { complete = true; break; }
+      // Never descend into directories or interpret names as paths.
+      const bool directory = (info->fattrib & AM_DIR) != 0;
+      if (!directory) ++files;
+      ESP_LOGI("atilla_storage", "ASSET DISCOVERY entry=%u type=%s size=%" PRIu32 " name=%.64s",
+               entries + 1, directory ? "DIR" : "FILE",
+               static_cast<uint32_t>(info->fsize), info->fname);
+    }
+    // A full directory might have more entries. Report truncation, not completeness.
+    const FRESULT close_rc = f_closedir(dir.get());
+    ok = ok && (close_rc == FR_OK);
+    ESP_LOGI("atilla_storage",
+             "ASSET DISCOVERY %s entries=%u files=%u complete=%s readdir_rc=%u close_rc=%u stack_free=%u NO WRITES",
+             ok ? "PASS" : "FAIL", entries, files, complete ? "YES" : "NO",
+             unsigned(rc), unsigned(close_rc), unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    return ok;
+  }
+
   bool run_batched_read_only_diagnostics() {
     ESP_LOGI("atilla_storage", "BATCH 1/5 mounted=%s stack_min_free=%u bytes",
              mounted_ ? "YES" : "NO", unsigned(uxTaskGetStackHighWaterMark(nullptr)));
