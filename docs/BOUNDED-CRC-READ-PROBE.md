@@ -11,3 +11,7 @@ It opens the existing `/ATILLA/VERIFY.BIN` in `FA_READ` only, requires an **exac
 Expected log: `FILE CRC pass=1`, `FILE CRC pass=2`, `FILE CRC READ-ONLY PASS ... repeatable=YES NO WRITES`, `FILE CRC READ-ONLY PROBE PASS`, followed by FatFs unmount.
 
 **Release gate:** CI parse and compile, then full private firmware compile + physical hardware check. Keep 4.7.9v as rollback and don't merge this branch before hardware acceptance.
+
+## Combined acceptance mode (fewer firmware cycles)
+
+Use `combined_readonly_probe: true` with all other FatFs probe modes false and `fatfs_mount_test: true`. The existing worker performs the raw 12-byte known-file check, mounts FatFs **once**, enumerates up to 32 immediate `/ATILLA` entries and performs the two-pass 4 KiB CRC read of `/ATILLA/VERIFY.BIN`. It logs `COMBINED READ-ONLY PASS` only if discovery and CRC both pass, then unmounts. No writes, UI asset loading, or recursive traversal. The automated pipeline validates four probe YAML fixtures but runs one combined C++ compile instead of four separate compiles. This mode is experimental until hardware-tested.
