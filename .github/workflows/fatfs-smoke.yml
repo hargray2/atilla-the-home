@@ -1,11 +1,19 @@
-name: FATFS compile-only smoke test
+name: FatFs component validation
 
 on:
-  push:
-    branches: [dev/fatfs-readonly, dev/fatfs-write-test, dev/storage-service, dev/storage-repeat-test, dev/persistent-settings]
+  pull_request:
     paths:
       - "components/atilla_storage/**"
-      - "tests/fatfs-smoke.yaml"
+      - "tests/**"
+      - ".github/workflows/fatfs-smoke.yml"
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "refactor/**"
+    paths:
+      - "components/atilla_storage/**"
+      - "tests/**"
       - ".github/workflows/fatfs-smoke.yml"
   workflow_dispatch:
 
@@ -18,9 +26,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install ESPHome 2026.9.1
-        run: pip install "esphome==2026.9.1"
-      - name: Validate isolated non-private test YAML
+      - name: Unit-test storage mode validation and worker routing
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install pinned ESPHome
+        run: python -m pip install "esphome==2026.9.1"
+      - name: Validate isolated non-private fixture
         run: esphome config tests/fatfs-smoke.yaml
-      - name: Compile FATFS adapter (CI only; no physical SD access)
+      - name: Compile isolated FatFs adapter
         run: esphome compile tests/fatfs-smoke.yaml
