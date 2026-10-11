@@ -42,3 +42,7 @@ jobs:
         run: esphome config tests/asset-discovery-smoke.yaml
       - name: Compile read-only asset discovery variant
         run: esphome compile tests/asset-discovery-smoke.yaml
+      - name: Validate bounded CRC reader
+        run: esphome config tests/bounded-crc-smoke.yaml
+      - name: Compile bounded CRC reader
+        run: esphome compile tests/bounded-crc-smoke.yaml
