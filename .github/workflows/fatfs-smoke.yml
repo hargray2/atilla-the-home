@@ -38,3 +38,7 @@ jobs:
         run: esphome config tests/fatfs-smoke.yaml
       - name: Compile isolated FatFs adapter
         run: esphome compile tests/fatfs-smoke.yaml
+      - name: Validate opt-in read-only asset discovery
+        run: esphome config tests/asset-discovery-smoke.yaml
+      - name: Compile read-only asset discovery variant
+        run: esphome compile tests/asset-discovery-smoke.yaml

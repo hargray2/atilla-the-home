@@ -200,6 +200,7 @@ class AtillaStorage : public Component {
   void set_fatfs_fil_heap_probe(bool enabled) { fatfs_fil_heap_probe_ = enabled; }
   void set_fatfs_open_only_probe(bool enabled) { fatfs_open_only_probe_ = enabled; }
   void set_fatfs_batch_read_probe(bool enabled) { fatfs_batch_read_probe_ = enabled; }
+  void set_asset_discovery_probe(bool enabled) { asset_discovery_probe_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -211,7 +212,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -347,6 +348,9 @@ class AtillaStorage : public Component {
     } else if (fatfs_write_roundtrip_test_) {
       const bool ok = fatfs.run_batched_write_roundtrip();
       ESP_LOGI("atilla_storage", "FATFS WRITE ROUNDTRIP %s", ok ? "PASS" : "FAIL");
+    } else if (asset_discovery_probe_) {
+      const bool ok = fatfs.run_asset_discovery_read_only();
+      ESP_LOGI("atilla_storage", "ASSET DISCOVERY READ-ONLY %s", ok ? "PASS" : "FAIL");
     } else if (fatfs_batch_read_probe_) {
       const bool ok = fatfs.run_batched_read_only_diagnostics();
       ESP_LOGI("atilla_storage", "FATFS BATCH READ-ONLY %s", ok ? "PASS" : "FAIL");
@@ -388,6 +392,7 @@ class AtillaStorage : public Component {
   bool fatfs_fil_heap_probe_{false};
   bool fatfs_open_only_probe_{false};
   bool fatfs_batch_read_probe_{false};
+  bool asset_discovery_probe_{false};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
