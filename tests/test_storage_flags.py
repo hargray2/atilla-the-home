@@ -59,7 +59,7 @@ class FatfsModes(unittest.TestCase):
     def test_each_mode_requires_mount(self):
         for mode in self.modes:
             with self.subTest(mode=mode):
-                self.assertIs(self.validate(self.config([mode])), self.validate(self.config([mode])))
+                self.assertEqual(self.validate(self.config([mode])), self.config([mode]))
                 with self.assertRaisesRegex(FakeCV.Invalid, "require fatfs_mount_test"):
                     self.validate(self.config([mode], mount=False))
 
