@@ -229,7 +229,10 @@ touchscreen:
     swap_xy: true
   on_touch:
     - lambda: |-
-        if (touch.y >= 199 && touch.y < 240) {\n          id(mini_page) = touch.x < 107 ? 0 : (touch.x < 213 ? 1 : 2);\n          id(mini_display).update();\n        }\n        id(last_touch_x) = touch.x;
+        if (touch.y >= 199 && touch.y < 240) {
+          id(mini_page) = touch.x < 107 ? 0 : (touch.x < 213 ? 1 : 2);
+          id(mini_display).update();
+        }\n        id(last_touch_x) = touch.x;
         id(last_touch_y) = touch.y;
         ESP_LOGI("atilla_mini_touch", "touch x=%d y=%d raw_x=%d raw_y=%d",
                  touch.x, touch.y, touch.x_raw, touch.y_raw);
