@@ -1,0 +1,235 @@
+# ATILLA Mini 0.2.0 - ATILLA NEO dashboard (experimental)
+# Target: ESP32-2432S028 dual USB. ST7789V candidate, NOT hardware-confirmed.
+# Back up factory flash before installing. Never flash Waveshare firmware to CYD.
+substitutions:
+  device_name: atilla-mini
+  friendly_name: ATILLA Mini
+  outdoor_temp_entity: sensor.outdoor_temperature
+  outdoor_humidity_entity: sensor.outdoor_humidity
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "ATILLA Mini CYD v0.2.0 - NEO touchscreen dashboard"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret atilla_mini_api_key
+
+ota:
+  - platform: esphome
+    password: !secret atilla_mini_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "ATILLA-Mini-Recovery"
+    password: !secret atilla_mini_fallback_password
+
+captive_portal:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+sensor:
+  - platform: wifi_signal
+    name: "Mini WiFi Signal"
+    id: mini_wifi_rssi
+    update_interval: 30s
+  - platform: uptime
+    name: "Mini Uptime"
+    id: mini_uptime
+  - platform: homeassistant
+    id: mini_outdoor_temp
+    entity_id: ${outdoor_temp_entity}
+    internal: true
+  - platform: homeassistant
+    id: mini_outdoor_humidity
+    entity_id: ${outdoor_humidity_entity}
+    internal: true
+
+binary_sensor:
+  - platform: status
+    name: "Mini API Status"
+
+output:
+  - platform: ledc
+    id: mini_backlight_pwm
+    pin: GPIO21
+    frequency: 1000 Hz
+
+light:
+  - platform: monochromatic
+    id: mini_backlight
+    name: "Mini Backlight"
+    output: mini_backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+spi:
+  - id: lcd_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+  - id: touch_spi
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+font:
+  - file: "gfonts://Roboto"
+    id: mini_font
+    size: 20
+  - file: "gfonts://Roboto"
+    id: mini_big
+    size: 48
+  - file: "gfonts://Roboto"
+    id: mini_small
+    size: 14
+
+color:
+  - id: bg_color
+    red: 2%
+    green: 4%
+    blue: 9%
+  - id: accent_color
+    red: 6%
+    green: 78%
+    blue: 86%
+
+display:
+  - platform: ili9xxx
+    id: mini_display
+    model: ST7789V
+    spi_id: lcd_spi
+    cs_pin:
+      number: GPIO15
+      ignore_strapping_warning: true
+    dc_pin:
+      number: GPIO2
+      ignore_strapping_warning: true
+    invert_colors: false
+    dimensions:
+      width: 240
+      height: 320
+    rotation: 90
+    color_palette: 8BIT
+    update_interval: 500ms
+    lambda: |-
+      const Color bg(6, 10, 22), panel(15, 24, 41), cyan(0, 226, 223);
+      const Color white(242, 249, 255), muted(134, 154, 175);
+      const Color pink(251, 79, 154), green(104, 243, 173);
+      it.fill(bg);
+      // Top gradient-inspired neon strokes; no big framebuffer allocations.
+      it.filled_rectangle(0, 0, 320, 3, cyan);
+      it.print(12, 9, id(mini_small), cyan, "A T I L L A   /   N E O");
+      it.print(286, 9, id(mini_small), muted, "02");
+      it.line(12, 32, 308, 32, panel);
+
+      if (id(mini_page) == 0) {
+        it.print(12, 39, id(mini_small), muted, "HOME  /  LIVE SYSTEM");
+        if (id(ha_time).now().is_valid()) {
+          it.strftime(10, 57, id(mini_big), white, "%I:%M", id(ha_time).now());
+          it.strftime(234, 84, id(mini_small), cyan, "%p", id(ha_time).now());
+          it.strftime(13, 113, id(mini_small), muted, "%a  %b %d  %Y", id(ha_time).now());
+        } else {
+          it.print(12, 68, id(mini_font), pink, "SYNCING TIME...");
+        }
+        it.filled_rectangle(12, 144, 144, 47, panel);
+        it.filled_rectangle(164, 144, 144, 47, panel);
+        it.print(20, 149, id(mini_small), muted, "OUTSIDE TEMP");
+        if (id(mini_outdoor_temp).has_state()) {
+          it.printf(20, 166, id(mini_font), white, "%.1f", id(mini_outdoor_temp).state);
+        } else {
+          it.print(20, 166, id(mini_font), muted, "--");
+        }
+        it.print(174, 149, id(mini_small), muted, "HUMIDITY");
+        if (id(mini_outdoor_humidity).has_state()) {
+          it.printf(174, 166, id(mini_font), white, "%.0f%%", id(mini_outdoor_humidity).state);
+        } else {
+          it.print(174, 166, id(mini_font), muted, "--");
+        }
+      } else if (id(mini_page) == 1) {
+        it.print(12, 43, id(mini_font), white, "ATMOSPHERE");
+        it.filled_rectangle(12, 79, 296, 107, panel);
+        it.print(23, 87, id(mini_small), cyan, "HOME ASSISTANT WEATHER INPUTS");
+        it.print(23, 112, id(mini_small), muted, "TEMP");
+        if (id(mini_outdoor_temp).has_state()) {
+          it.printf(22, 133, id(mini_font), white, "%.1f", id(mini_outdoor_temp).state);
+        } else {
+          it.print(22, 133, id(mini_font), pink, "NO DATA");
+        }
+        it.print(174, 112, id(mini_small), muted, "HUMIDITY");
+        if (id(mini_outdoor_humidity).has_state()) {
+          it.printf(174, 133, id(mini_font), white, "%.0f%%", id(mini_outdoor_humidity).state);
+        } else {
+          it.print(174, 133, id(mini_font), pink, "NO DATA");
+        }
+        it.print(12, 191, id(mini_small), muted, "Forecast + radar: next phase");
+      } else {
+        it.print(12, 43, id(mini_font), white, "SYSTEM PULSE");
+        it.filled_rectangle(12, 78, 296, 111, panel);
+        it.print(22, 86, id(mini_small), muted, "WI-FI SIGNAL");
+        if (id(mini_wifi_rssi).has_state()) {
+          it.printf(22, 105, id(mini_font), cyan, "%.0f dBm", id(mini_wifi_rssi).state);
+        } else {
+          it.print(22, 105, id(mini_font), pink, "CONNECTING");
+        }
+        it.printf(22, 137, id(mini_small), muted, "UPTIME %.0f sec", id(mini_uptime).state);
+        it.printf(22, 159, id(mini_small), green, "FREE HEAP: %u bytes", ESP.getFreeHeap());
+      }
+      // Three large tab hit targets at y >= 199.
+      it.filled_rectangle(0, 200, 320, 40, panel);
+      for (int i = 0; i < 3; i++) {
+        if (id(mini_page) == i)
+          it.filled_rectangle(i * 106 + 5, 234, 96, 3, cyan);
+      }
+      it.print(31, 209, id(mini_small), id(mini_page) == 0 ? cyan : muted, "HOME");
+      it.print(145, 209, id(mini_small), id(mini_page) == 1 ? cyan : muted, "WX");
+      it.print(254, 209, id(mini_small), id(mini_page) == 2 ? cyan : muted, "SYS");
+
+globals:
+  - id: mini_page
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: last_touch_x
+    type: int
+    restore_value: no
+    initial_value: '-1'
+  - id: last_touch_y
+    type: int
+    restore_value: no
+    initial_value: '-1'
+
+touchscreen:
+  platform: xpt2046
+  id: mini_touch
+  display: mini_display
+  spi_id: touch_spi
+  cs_pin: GPIO33
+  interrupt_pin: GPIO36
+  update_interval: 50ms
+  threshold: 400
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 340
+    y_max: 3860
+  transform:
+    swap_xy: true
+  on_touch:
+    - lambda: |-
+        if (touch.y >= 199 && touch.y < 240) {\n          id(mini_page) = touch.x < 107 ? 0 : (touch.x < 213 ? 1 : 2);\n          id(mini_display).update();\n        }\n        id(last_touch_x) = touch.x;
+        id(last_touch_y) = touch.y;
+        ESP_LOGI("atilla_mini_touch", "touch x=%d y=%d raw_x=%d raw_y=%d",
+                 touch.x, touch.y, touch.x_raw, touch.y_raw);
