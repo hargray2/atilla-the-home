@@ -8,6 +8,8 @@ on:
   pull_request:
     paths:
       - "tools/validate_asset_manifest.py"
+      - "tools/build_sd_test_fixture.py"
+      - "tests/test_sd_fixture.py"
       - "tests/test_asset_manifest.py"
       - "assets/**"
       - ".github/workflows/asset-manifest.yml"
@@ -35,6 +37,8 @@ jobs:
         run: python tools/validate_asset_manifest.py assets/manifest.example.json
       - name: Run bounded manifest regression suite
         run: python -m unittest discover -s tests -p test_asset_manifest.py -v
+      - name: Test deterministic SD asset fixture
+        run: python -m unittest discover -s tests -p test_sd_fixture.py -v
       - name: Assert rejected path traversal
         run: |
           python - <<'PY'
