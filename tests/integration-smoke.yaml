@@ -1,0 +1,85 @@
+# CI-ONLY combined-component compile fixture. Do NOT flash to ATILLA:
+# uses generic S3 GPIO CS pins, not the Waveshare CH422G expander.
+esphome:
+  name: atilla-components-smoke
+  friendly_name: ATILLA Integrated External Components Compile
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: "dummy-test-network"
+  password: "compile-only-password"
+
+spi:
+  id: shared_bus
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  miso_pin: GPIO13
+
+spi_device:
+  - id: atilla_sd_probe_device
+    spi_id: shared_bus
+    cs_pin: GPIO14
+    data_rate: 200kHz
+  - id: atilla_sd_idle_clocks
+    spi_id: shared_bus
+    cs_pin: GPIO15
+    data_rate: 200kHz
+
+display:
+  - platform: ili9xxx
+    model: ST7789V
+    cs_pin: GPIO10
+    dc_pin: GPIO9
+    reset_pin: GPIO8
+    invert_colors: true
+
+http_request:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [atilla_storage, atilla_radar_filter]
+
+atilla_storage:
+  id: atilla_storage_smoke
+  card_device: atilla_sd_probe_device
+  idle_device: atilla_sd_idle_clocks
+  fatfs_mount_test: true
+  fatfs_batch_read_probe: true
+  fatfs_file_read_test: false
+  fatfs_entry_probe: false
+  fatfs_fil_heap_probe: false
+  fatfs_open_only_probe: false
+  fatfs_write_roundtrip_test: false
+  storage_service_test: false
+  storage_repeat_test: false
+  settings_persistence_probe: false
+
+atilla_radar_filter:
+  id: rain_filter
+
+image:
+  - platform: online_image
+    id: radar_test
+    url: "https://example.com/placeholder-radar.png"
+    format: PNG
+    type: RGB565
+    transparency: alpha_channel
+    resize: 256x256
+    update_interval: never
+    on_download_finished:
+      then:
+        - if:
+            condition:
+              lambda: "return !cached;"
+            then:
+              - atilla_radar_filter.apply:
+                  id: rain_filter
+                  image_id: radar_test

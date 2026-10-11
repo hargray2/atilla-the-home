@@ -1,0 +1,51 @@
+name: SD asset manifest validation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "tools/validate_asset_manifest.py"
+      - "assets/**"
+      - ".github/workflows/asset-manifest.yml"
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "refactor/**"
+    paths:
+      - "tools/validate_asset_manifest.py"
+      - "assets/**"
+      - ".github/workflows/asset-manifest.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate sample manifest
+        run: python tools/validate_asset_manifest.py assets/manifest.example.json
+      - name: Assert rejected path traversal
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "tools")
+          from validate_asset_manifest import validate
+          good={"schema_version":1,"assets":[{"path":"icons/radar.png","kind":"image/png","bytes":512,"crc32":"630105D1"}]}
+          assert validate(good)==1
+          for badpath in ["../settings.dat","icons/../settings.dat","/secret.png","a//b.png"]:
+              item={"schema_version":1,"assets":[dict(good["assets"][0],path=badpath)]}
+              try:
+                  validate(item)
+              except ValueError:
+                  continue
+              raise AssertionError(f"Accepted unsafe asset path: {badpath}")
+          print("ATILLA asset manifest safety cases PASS")
+          PY

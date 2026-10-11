@@ -1,0 +1,56 @@
+esphome:
+  name: atilla-radar-compile
+  friendly_name: ATILLA Radar Filter Compile Test
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: "dummy-test-network"
+  password: "compile-only-password"
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+display:
+  - platform: ili9xxx
+    model: ST7789V
+    cs_pin: GPIO10
+    dc_pin: GPIO9
+    reset_pin: GPIO8
+    invert_colors: true
+
+http_request:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [atilla_radar_filter]
+
+atilla_radar_filter:
+  id: rain_filter
+
+image:
+  - platform: online_image
+    id: radar_test
+    url: "https://example.com/placeholder-radar.png"
+    format: PNG
+    type: RGB565
+    transparency: alpha_channel
+    resize: 256x256
+    update_interval: never
+    on_download_finished:
+      then:
+        - if:
+            condition:
+              lambda: "return !cached;"
+            then:
+              - atilla_radar_filter.apply:
+                  id: rain_filter
+                  image_id: radar_test

@@ -1,0 +1,40 @@
+name: FatFs component validation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "components/atilla_storage/**"
+      - "tests/**"
+      - ".github/workflows/fatfs-smoke.yml"
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "refactor/**"
+    paths:
+      - "components/atilla_storage/**"
+      - "tests/**"
+      - ".github/workflows/fatfs-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit-test storage mode validation and worker routing
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install pinned ESPHome
+        run: python -m pip install "esphome==2026.9.1"
+      - name: Validate isolated non-private fixture
+        run: esphome config tests/fatfs-smoke.yaml
+      - name: Compile isolated FatFs adapter
+        run: esphome compile tests/fatfs-smoke.yaml

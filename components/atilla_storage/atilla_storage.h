@@ -30,7 +30,7 @@ class ReadOnlySD {
     card_=wrap(card); idle_=wrap(idle);
   }
   bool begin() {
-    initialized_=false;
+    initialized_=false; capacity_verified_=false; writes_allowed_=false; card_sectors_=0;
     if (!card_.ptr || !idle_.ptr) return false;
     idle_.select();
     for (int i=0;i<12;i++) idle_.tx(0xff);
@@ -76,6 +76,77 @@ class ReadOnlySD {
     if(!initialized_ || !out || (uint64_t(lba) >= uint64_t(partition_start_) + partition_sectors_))return false;
     card_.select();bool ok=read_selected_(lba,out);card_.deselect();return ok;
   }
+  // Physical-card reads for FatFs: the MBR at LBA 0 must be accessible.
+  bool read_physical_sector(uint32_t lba, uint8_t *out) {
+    if (!initialized_ || !out || uint64_t(lba) >= physical_sector_limit()) return false;
+    card_.select();
+    bool ok = read_selected_(lba, out);
+    card_.deselect();
+    return ok;
+  }
+  uint64_t physical_sector_limit() const {
+    return uint64_t(partition_start_) + partition_sectors_;
+  }
+  // SDHC CSD v2 card capacity: verified independently of FAT partition fields.
+  bool verify_physical_capacity() {
+    if (!initialized_) return false;
+    uint8_t csd[16] = {};
+    card_.select();
+    bool ok = command_(9, 0, 0x01) == 0;
+    if (ok) {
+      uint8_t token = 0xff;
+      for (int i=0;i<16000;i++) {
+        token=card_.tx(0xff);
+        if(token!=0xff)break;
+      }
+      ok=(token==0xfe);
+      if(ok) {
+        for(auto &b : csd)b=card_.tx(0xff);
+        card_.tx(0xff);card_.tx(0xff);
+      }
+    }
+    card_.deselect();
+    if(!ok || (csd[0] >> 6)!=1) return false;
+    const uint32_t c_size = (uint32_t(csd[7] & 0x3f) << 16) |
+                            (uint32_t(csd[8]) << 8) | csd[9];
+    card_sectors_ = (uint64_t(c_size)+1ULL)*1024ULL;
+    capacity_verified_ = (physical_sector_limit() <= card_sectors_) &&
+                         card_sectors_ <= uint64_t(UINT32_MAX);
+    ESP_LOGI("atilla_storage", "SD CSD verified capacity sectors=%" PRIu64
+             " partition_end=%" PRIu64 " status=%s", card_sectors_,
+             physical_sector_limit(), capacity_verified_ ? "PASS" : "FAIL");
+    return capacity_verified_;
+  }
+  bool enable_test_writes() {
+    writes_allowed_ = initialized_ && capacity_verified_;
+    return writes_allowed_;
+  }
+  void disable_test_writes() { writes_allowed_ = false; }
+  bool write_physical_sector(uint32_t lba, const uint8_t *in) {
+    if (!writes_allowed_ || !initialized_ || !capacity_verified_ || !in ||
+        uint64_t(lba)<partition_start_ || uint64_t(lba)>=physical_sector_limit() ||
+        uint64_t(lba)>=card_sectors_) return false;
+    card_.select();
+    bool ok=command_(24,lba,0x01)==0;
+    if(ok) {
+      card_.tx(0xff); card_.tx(0xfe);
+      for(unsigned i=0;i<512;i++) card_.tx(in[i]);
+      card_.tx(0xff);card_.tx(0xff);
+      uint8_t response=0xff;
+      for(unsigned attempt=0;attempt<16;attempt++) {
+        response=card_.tx(0xff);
+        if((response & 0x11)==0x01) break;
+      }
+      ok=(response & 0x1f)==0x05;
+      if(ok) {
+        bool ready=false;
+        for(unsigned i=0;i<200000;i++) if(card_.tx(0xff)==0xff){ready=true;break;}
+        ok=ready;
+      }
+    }
+    card_.deselect();
+    return ok;
+  }
   uint32_t partition_start() const {return partition_start_;}
   uint32_t partition_sectors() const {return partition_sectors_;}
   bool initialized() const {return initialized_;}
@@ -83,6 +154,9 @@ class ReadOnlySD {
  private:
   Bus card_,idle_;
   bool initialized_{false};
+  bool capacity_verified_{false};
+  bool writes_allowed_{false};
+  uint64_t card_sectors_{0};
   uint32_t partition_start_{0},partition_sectors_{0};
   static bool signature_(const uint8_t *p) {return p[510]==0x55 && p[511]==0xAA;}
   static uint32_t le32_(const uint8_t *p) {
@@ -107,8 +181,9 @@ class ReadOnlySD {
 };
 } // namespace esphome::atilla_storage
 
-// ESPHome codegen integration: one delayed, read-only probe per boot.
-// In particular this does NOT mount FATFS or expose a write method.
+#include "fatfs_readonly.h"
+// ESPHome codegen integration: one delayed storage probe per boot.
+// Experimental storage-service mode uses a separate FreeRTOS worker stack.
 #include "esphome/core/component.h"
 #include "esphome/components/spi_device/spi_device.h"
 #include "esphome/core/hal.h"
@@ -119,6 +194,16 @@ class AtillaStorage : public Component {
     card_ = card;
     idle_ = idle;
   }
+  void set_fatfs_mount_test(bool enabled) { fatfs_mount_test_ = enabled; }
+  void set_fatfs_file_read_test(bool enabled) { fatfs_file_read_test_ = enabled; }
+  void set_fatfs_entry_probe(bool enabled) { fatfs_entry_probe_ = enabled; }
+  void set_fatfs_fil_heap_probe(bool enabled) { fatfs_fil_heap_probe_ = enabled; }
+  void set_fatfs_open_only_probe(bool enabled) { fatfs_open_only_probe_ = enabled; }
+  void set_fatfs_batch_read_probe(bool enabled) { fatfs_batch_read_probe_ = enabled; }
+  void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
+  void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
+  void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
+  void set_settings_persistence_probe(bool enabled) { settings_persistence_probe_ = enabled; }
   void setup() override {
     start_ms_ = millis();
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
@@ -126,6 +211,27 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_) {
+      ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
+      const BaseType_t created = xTaskCreatePinnedToCore(
+          &AtillaStorage::storage_worker_, "atilla_sd_worker",
+          24576, this, 1, nullptr, 1);
+      if (created != pdPASS)
+        ESP_LOGE("atilla_storage", "Could not create SD worker; no storage test run");
+      return;
+    }
+    run_probe_();
+  }
+  static void storage_worker_(void *parameter) {
+    auto *self = static_cast<AtillaStorage *>(parameter);
+    ESP_LOGI("atilla_storage", "SD worker started; stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    self->run_probe_();
+    ESP_LOGI("atilla_storage", "SD worker finished; stack minimum-free=%u bytes",
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    vTaskDelete(nullptr);
+  }
+  void run_probe_() {
     if (card_ == nullptr || idle_ == nullptr) {
       ESP_LOGE("atilla_storage", "Read-only probe skipped: SPI device binding absent");
       return;
@@ -217,6 +323,56 @@ class AtillaStorage : public Component {
       ESP_LOGI("atilla_storage", "FILE CONTENT READ PASSED: WPSETT~1.DAT bytes=12 CRC32=%08" PRIX32, crc);
     else
       ESP_LOGW("atilla_storage", "FILE CHECK CRC MISMATCH: got=%08" PRIX32 " expected=630105D1", crc);
+    if (fatfs_mount_test_) this->run_fatfs_test_(sd);
+  }
+  void run_fatfs_test_(ReadOnlySD &sd) {
+    ESP_LOGI("atilla_storage", "Opt-in FATFS read-only mount starting (NO WRITES)");
+    experimental::ReadOnlyFatFs fatfs(sd);
+    if (!fatfs.mount()) {
+      ESP_LOGW("atilla_storage", "FATFS MOUNT FAILED; no filesystem modifications attempted");
+      return;
+    }
+    ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
+    // CRASH ISOLATION: the previous on-device run disconnected immediately
+    // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
+    if (settings_persistence_probe_) {
+      const bool ok = fatfs.run_settings_persistence_probe();
+      ESP_LOGI("atilla_storage", "ATILLA SETTINGS PERSISTENCE %s",ok?"PASS":"FAIL");
+    } else if (storage_repeat_test_) {
+      const bool ok = fatfs.run_repeated_write_test();
+      ESP_LOGI("atilla_storage", "ATILLA STORAGE REPEAT %s",ok?"PASS":"FAIL");
+    } else if (storage_service_test_) {
+      const bool ok = fatfs.run_storage_service_test();
+      ESP_LOGI("atilla_storage", "ATILLA STORAGE SERVICE 4KiB %s",ok?"PASS":"FAIL");
+    } else if (fatfs_write_roundtrip_test_) {
+      const bool ok = fatfs.run_batched_write_roundtrip();
+      ESP_LOGI("atilla_storage", "FATFS WRITE ROUNDTRIP %s", ok ? "PASS" : "FAIL");
+    } else if (fatfs_batch_read_probe_) {
+      const bool ok = fatfs.run_batched_read_only_diagnostics();
+      ESP_LOGI("atilla_storage", "FATFS BATCH READ-ONLY %s", ok ? "PASS" : "FAIL");
+    } else if (fatfs_open_only_probe_) {
+      const bool ok = fatfs.probe_existing_file_open_only();
+      ESP_LOGI("atilla_storage", "FATFS OPEN-ONLY probe %s", ok ? "PASS" : "FAIL");
+    } else if (fatfs_fil_heap_probe_) {
+      const bool ok = fatfs.probe_file_object_allocation();
+      ESP_LOGI("atilla_storage", "FATFS FIL heap probe %s", ok ? "PASS" : "FAIL");
+    } else if (fatfs_entry_probe_) {
+      // Crash-isolation stage: deliberately do not enter the read function.
+      ESP_LOGI("atilla_storage", "FATFS ENTRY PROBE PASS: no f_open, no f_read, no file object");
+    } else if (fatfs_file_read_test_) {
+      ESP_LOGW("atilla_storage", "EXPERIMENTAL FATFS f_open/f_read requested");
+      uint32_t crc = 0, size = 0;
+      if (fatfs.read_known_file(crc, size)) {
+        ESP_LOGI("atilla_storage", "FATFS FILE READ: bytes=%" PRIu32 " CRC32=%08" PRIX32,
+                 size, crc);
+      } else {
+        ESP_LOGW("atilla_storage", "FATFS FILE OPEN/READ FAILED");
+      }
+    } else {
+      ESP_LOGI("atilla_storage", "FATFS file open/read SKIPPED (crash isolation)");
+    }
+    fatfs.unmount();
+    ESP_LOGI("atilla_storage", "FATFS unmounted");
   }
   void dump_config() override {
     ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
@@ -226,5 +382,16 @@ class AtillaStorage : public Component {
   spi_device::SPIDeviceComponent *idle_{nullptr};
   uint32_t start_ms_{0};
   bool attempted_{false};
+  bool fatfs_mount_test_{false};
+  bool fatfs_file_read_test_{false};
+  bool fatfs_entry_probe_{false};
+  bool fatfs_fil_heap_probe_{false};
+  bool fatfs_open_only_probe_{false};
+  bool fatfs_batch_read_probe_{false};
+  bool fatfs_write_roundtrip_test_{false};
+  bool storage_service_test_{false};
+  bool storage_repeat_test_{false};
+  bool settings_persistence_probe_{false};
 };
 } // namespace esphome::atilla_storage
+
