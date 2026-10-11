@@ -1,0 +1,38 @@
+name: Integrated components compile
+
+on:
+  pull_request:
+    paths:
+      - "components/**"
+      - "tests/integration-smoke.yaml"
+      - ".github/workflows/integration-components.yml"
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "refactor/**"
+    paths:
+      - "components/**"
+      - "tests/integration-smoke.yaml"
+      - ".github/workflows/integration-components.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  combined-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production-matched ESPHome
+        run: python -m pip install "esphome==2026.9.1"
+      - name: Validate both local components together
+        run: esphome config tests/integration-smoke.yaml
+      - name: Compile both components together
+        run: esphome compile tests/integration-smoke.yaml
