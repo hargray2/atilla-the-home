@@ -47,7 +47,7 @@ class FatfsModes(unittest.TestCase):
             if key.startswith("CONF_FATFS_") and key not in ("CONF_FATFS_MOUNT_TEST",)
         ] + [
             cls.constants[k] for k in
-            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
+            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
              "CONF_SETTINGS_PERSISTENCE_PROBE")
         ]
 
