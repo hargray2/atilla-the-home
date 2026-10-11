@@ -1,0 +1,239 @@
+# ATILLA Mini 0.6.0 - ATILLA NEO dashboard (experimental)
+# Target: ESP32-2432S028 dual USB. ST7789V candidate, NOT hardware-confirmed.
+# Back up factory flash before installing. Never flash Waveshare firmware to CYD.
+substitutions:
+  device_name: atilla-mini
+  friendly_name: ATILLA Mini
+  weather_entity: weather.forecast_home
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "ATILLA Mini CYD v0.6.0 - NEO touchscreen dashboard"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret atilla_mini_api_key
+
+ota:
+  - platform: esphome
+    password: !secret atilla_mini_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "ATILLA-Mini-Recovery"
+    password: !secret atilla_mini_fallback_password
+
+captive_portal:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+sensor:
+  - platform: wifi_signal
+    name: "Mini WiFi Signal"
+    id: mini_wifi_rssi
+    update_interval: 30s
+  - platform: uptime
+    name: "Mini Uptime"
+    id: mini_uptime
+  - platform: adc
+    pin: GPIO34
+    id: mini_ambient_light
+    name: "Mini Ambient Sensor Voltage"
+    attenuation: auto
+    update_interval: 15s
+  - platform: homeassistant
+    id: mini_outdoor_temp
+    entity_id: ${weather_entity}
+    attribute: temperature
+    internal: true
+  - platform: homeassistant
+    id: mini_outdoor_humidity
+    entity_id: ${weather_entity}
+    attribute: humidity
+    internal: true
+
+binary_sensor:
+  - platform: status
+    name: "Mini API Status"
+
+output:
+  - platform: ledc
+    id: mini_backlight_pwm
+    pin: GPIO21
+    frequency: 1000 Hz
+
+light:
+  - platform: monochromatic
+    id: mini_backlight
+    name: "Mini Backlight"
+    output: mini_backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+spi:
+  - id: lcd_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+  - id: touch_spi
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+font:
+  - file: "gfonts://Roboto"
+    id: mini_font
+    size: 20
+  - file: "gfonts://Roboto"
+    id: mini_big
+    size: 48
+  - file: "gfonts://Roboto"
+    id: mini_small
+    size: 14
+
+color:
+  - id: bg_color
+    red: 2%
+    green: 4%
+    blue: 9%
+  - id: accent_color
+    red: 6%
+    green: 78%
+    blue: 86%
+
+display:
+  - platform: mipi_spi
+    id: mini_display
+    model: ST7789V
+    spi_id: lcd_spi
+    cs_pin:
+      number: GPIO15
+      ignore_strapping_warning: true
+    dc_pin:
+      number: GPIO2
+      ignore_strapping_warning: true
+    invert_colors: false
+    dimensions:
+      width: 240
+      height: 320
+    rotation: 90
+    color_depth: 8
+    buffer_size: 20%
+    update_interval: 500ms
+    lambda: |-
+      const Color bg(5,9,21), card(15,26,46), aqua(20,224,220), grey(130,153,176), white(236,247,255), pink(255,75,150);
+      it.fill(bg);
+      it.filled_rectangle(0,0,320,3,aqua);
+      for(int x=0;x<320;x+=24) it.line(x,34,x,199,Color(9,17,31));
+      it.print(10,10,id(mini_small),aqua,"ATILLA  //  MINI  0.6");
+      it.line(10,32,309,32,card);
+      int page=id(mini_page);
+      if(page==0) {
+        it.print(12,42,id(mini_small),grey,"HOME / LIVE");
+        if(id(ha_time).now().is_valid()) it.strftime(10,59,id(mini_big),white,"%I:%M",id(ha_time).now());
+        else it.print(12,74,id(mini_font),pink,"SYNCING TIME");
+        it.filled_rectangle(12,133,296,62,card);
+        it.print(21,140,id(mini_small),grey,"TEMPERATURE");
+        it.print(170,140,id(mini_small),grey,"HUMIDITY");
+        if(id(mini_outdoor_temp).has_state()) it.printf(21,160,id(mini_font),white,"%.1f",id(mini_outdoor_temp).state);
+        if(id(mini_outdoor_humidity).has_state()) it.printf(170,160,id(mini_font),aqua,"%.0f%%",id(mini_outdoor_humidity).state);
+      } else if(page==1 || page==2) {
+        it.print(12,45,id(mini_font),white,page==1?"ATMOSPHERE":"WEATHER DATA");
+        it.filled_rectangle(12,82,296,112,card);
+        it.print(22,92,id(mini_small),grey,"HOME ASSISTANT WEATHER");
+        if(id(mini_outdoor_temp).has_state()) it.printf(22,119,id(mini_font),white,"TEMP %.1f",id(mini_outdoor_temp).state);
+        if(id(mini_outdoor_humidity).has_state()) it.printf(22,149,id(mini_font),aqua,"HUM %.0f%%",id(mini_outdoor_humidity).state);
+      } else if(page==3) {
+        it.print(12,42,id(mini_font),white,"RADAR / CONCEPT");
+        it.print(12,68,id(mini_small),pink,"NOT LIVE WEATHER RADAR");
+        it.circle(160,145,51,card); it.circle(160,145,33,card);
+        int deg=(millis()/70)%360;
+        float a=deg*3.14159f/180;
+        it.line(160,145,160+(int)(50*cosf(a)),145+(int)(50*sinf(a)),aqua);
+      } else if(page==4) {
+        it.print(12,42,id(mini_font),white,"SYSTEM HEALTH");
+        it.filled_rectangle(12,82,296,112,card);
+        if(id(mini_wifi_rssi).has_state()) it.printf(22,91,id(mini_small),aqua,"WIFI %.0f dBm",id(mini_wifi_rssi).state);
+        it.printf(22,119,id(mini_small),white,"HEAP %u bytes",ESP.getFreeHeap());
+        if(id(mini_ambient_light).has_state()) it.printf(22,148,id(mini_small),grey,"LIGHT %.2f V",id(mini_ambient_light).state);
+      } else if(page==5) {
+        it.print(12,42,id(mini_font),white,"CONTROL CORE");
+        it.filled_rectangle(12,82,296,112,card);
+        it.printf(22,99,id(mini_font),aqua,"BACKLIGHT %d%%",id(mini_dim_level));
+        it.filled_rectangle(22,137,275,15,grey);
+        it.filled_rectangle(22,137,275*id(mini_dim_level)/100,15,aqua);
+        it.print(22,165,id(mini_small),white,"Tap card to cycle level");
+      } else {
+        it.print(12,42,id(mini_font),white,"ASSET VAULT");
+        it.filled_rectangle(12,82,296,112,card);
+        it.print(22,102,id(mini_small),pink,"SD DRIVER NOT ENABLED");
+        it.print(22,139,id(mini_small),grey,"CARD NOT REQUIRED");
+        it.print(22,164,id(mini_small),white,"READ-ONLY ASSETS NEXT");
+      }
+      it.filled_rectangle(0,201,320,39,card);
+      const char* tabs[7]={"HOME","WX","DATA","MAP","SYS","CTRL","SD"};
+      for(int i=0;i<7;i++) {
+        int x=3+i*45;
+        it.print(x,209,id(mini_small),i==page?aqua:grey,tabs[i]);
+        if(i==page) it.filled_rectangle(x,235,39,3,aqua);
+      }
+
+globals:
+  - id: mini_dim_level
+    type: int
+    restore_value: no
+    initial_value: "100"
+  - id: mini_page
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: last_touch_x
+    type: int
+    restore_value: no
+    initial_value: '-1'
+  - id: last_touch_y
+    type: int
+    restore_value: no
+    initial_value: '-1'
+
+touchscreen:
+  platform: xpt2046
+  id: mini_touch
+  display: mini_display
+  spi_id: touch_spi
+  cs_pin: GPIO33
+  interrupt_pin: GPIO36
+  update_interval: 50ms
+  threshold: 400
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 340
+    y_max: 3860
+  transform:
+    swap_xy: true
+  on_touch:
+    - lambda: |-
+        if(id(mini_page)==5 && touch.y>=82 && touch.y<195) {
+          int v=id(mini_dim_level);
+          id(mini_dim_level)= v==100?70:(v==70?40:(v==40?15:100));
+          auto c=id(mini_backlight).turn_on();
+          c.set_brightness(id(mini_dim_level)/100.0f);
+          c.perform();
+        } else {
+          id(mini_page)=(id(mini_page)+1)%7;
+        }
+        id(mini_display).update();
+        ESP_LOGI("atilla_mini", "touch x=%d y=%d page=%d",touch.x,touch.y,id(mini_page));
