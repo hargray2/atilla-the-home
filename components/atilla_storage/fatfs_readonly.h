@@ -444,6 +444,149 @@ class ReadOnlyFatFs {
   }
   // Opt-in discovery only. No file data reads, no writes, no SD formatting.
   // Must execute from the existing dedicated SD worker with FatFs mounted.
+  // Reusable read-only asset checksum primitive. This never transfers asset data
+  // to the display and never enables filesystem writes.
+  struct AssetDigest {
+    uint32_t size{0};
+    uint32_t crc32{0};
+    uint32_t chunks{0};
+  };
+  bool checksum_asset_readonly(const char *basename, uint32_t max_bytes,
+                               AssetDigest &result,
+                               uint32_t expected_crc32 = 0,
+                               bool verify_expected = false) {
+    result = AssetDigest{};
+    if (!mounted_ || !basename || max_bytes == 0 || max_bytes > 1048576U)
+      return false;
+    // Only one plain filename inside /ATILLA: prohibit traversal, separators,
+    // FatFs drive prefixes, controls and unexpectedly long paths.
+    unsigned length = 0;
+    for (; basename[length] != 0 && length <= 48; ++length) {
+      const char c = basename[length];
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+        return false;
+    }
+    if (length == 0 || length > 48 || basename[0] == '.' ||
+        std::strstr(basename, "..") != nullptr)
+      return false;
+    char path[80];
+    const int written = std::snprintf(path, sizeof(path), "%s/ATILLA/%s",
+                                     drive_path_, basename);
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(path))
+      return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) return false;
+    const FRESULT open_rc = f_open(file.get(), path, FA_READ);
+    if (open_rc != FR_OK) return false;
+    const FSIZE_t file_size = f_size(file.get());
+    bool ok = file_size > 0 && file_size <= max_bytes;
+    uint32_t crc = 0xffffffffU;
+    uint32_t total = 0;
+    uint32_t chunks = 0;
+    constexpr UINT kChunkBytes = 256;
+    constexpr uint32_t kMaxElapsedMs = 10000;
+    uint8_t buffer[kChunkBytes];
+    const uint32_t started = millis();
+    while (ok && total < file_size) {
+      // Deadline is cooperative: it does not interrupt a blocked FatFs call.
+      if (uint32_t(millis() - started) > kMaxElapsedMs) { ok = false; break; }
+      const UINT want = static_cast<UINT>(
+          (file_size - total) < kChunkBytes ? (file_size - total) : kChunkBytes);
+      UINT got = 0;
+      const FRESULT read_rc = f_read(file.get(), buffer, want, &got);
+      if (read_rc != FR_OK || got != want) { ok = false; break; }
+      for (UINT i = 0; i < got; ++i) {
+        crc ^= buffer[i];
+        for (unsigned bit = 0; bit < 8; ++bit)
+          crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+      }
+      total += got;
+      ++chunks;
+    }
+    const FRESULT close_rc = f_close(file.get());
+    ok = ok && close_rc == FR_OK && total == file_size;
+    if (ok) {
+      result.size = total;
+      result.crc32 = crc ^ 0xffffffffU;
+      result.chunks = chunks;
+      if (verify_expected && result.crc32 != expected_crc32)
+        ok = false;
+    }
+    return ok;
+  }
+
+  // Grouped acceptance for the reusable reader, with an observed checkpoint
+  // checksum. This supplements the previous raw repeatability test; it does
+  // not establish cryptographic authenticity of the underlying SD file.
+  bool run_asset_reader_acceptance_readonly() {
+    AssetDigest digest;
+    const bool ok = checksum_asset_readonly("VERIFY.BIN", 4096, digest,
+                                           0x5ACE03B3U, true);
+    ESP_LOGI("atilla_storage",
+             "ASSET READER %s filename=VERIFY.BIN bytes=%" PRIu32
+             " chunks=%" PRIu32 " crc32=%08" PRIX32
+             " expected=5ACE03B3 NO WRITES",
+             ok ? "PASS" : "FAIL", digest.size, digest.chunks, digest.crc32);
+    return ok && digest.size == 4096 && digest.chunks == 16;
+  }
+
+  // Read a known, existing 4 KiB diagnostics file without ever opening it for write.
+  // Two independent bounded passes must yield the same CRC32; this checks repeatability,
+  // NOT authenticity against an independently supplied checksum.
+  bool run_bounded_file_crc_probe() {
+    if (!mounted_) return false;
+    constexpr uint32_t kExpectedBytes = 4096;
+    constexpr UINT kChunk = 256;
+    constexpr uint32_t kMaxElapsedMs = 10000;
+    char name[40];
+    std::snprintf(name, sizeof(name), "%s/ATILLA/VERIFY.BIN", drive_path_);
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) return false;
+    uint32_t crc_pass[2] = {0, 0};
+    for (unsigned pass = 0; pass != 2; ++pass) {
+      const FRESULT opened = f_open(file.get(), name, FA_READ);
+      if (opened != FR_OK) {
+        ESP_LOGW("atilla_storage", "FILE CRC FAIL pass=%u open=%u", pass + 1, unsigned(opened));
+        return false;
+      }
+      bool ok = (f_size(file.get()) == kExpectedBytes);
+      uint32_t crc = 0xffffffffU;
+      uint32_t total = 0;
+      const uint32_t started = millis();
+      uint8_t buffer[kChunk];
+      while (ok && total < kExpectedBytes) {
+        if (uint32_t(millis() - started) > kMaxElapsedMs) { ok = false; break; }
+        UINT got = 0;
+        const UINT requested = UINT((kExpectedBytes - total) < kChunk ?
+                                    (kExpectedBytes - total) : kChunk);
+        const FRESULT rd = f_read(file.get(), buffer, requested, &got);
+        if (rd != FR_OK || got != requested) { ok = false; break; }
+        for (UINT i = 0; i < got; ++i) {
+          crc ^= buffer[i];
+          for (unsigned bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+        }
+        total += got;
+      }
+      const FRESULT closed = f_close(file.get());
+      if (!ok || closed != FR_OK || total != kExpectedBytes) {
+        ESP_LOGW("atilla_storage", "FILE CRC FAIL pass=%u bytes=%" PRIu32 " close=%u",
+                 pass + 1, total, unsigned(closed));
+        return false;
+      }
+      crc_pass[pass] = crc ^ 0xffffffffU;
+      ESP_LOGI("atilla_storage", "FILE CRC pass=%u bytes=%" PRIu32 " crc32=%08" PRIX32
+               " chunks=16 stack_free=%u", pass + 1, total, crc_pass[pass],
+               unsigned(uxTaskGetStackHighWaterMark(nullptr)));
+    }
+    const bool repeatable = crc_pass[0] == crc_pass[1];
+    ESP_LOGI("atilla_storage", "FILE CRC READ-ONLY %s bytes=4096 crc32=%08" PRIX32
+             " repeatable=%s NO WRITES", repeatable ? "PASS" : "FAIL",
+             crc_pass[0], repeatable ? "YES" : "NO");
+    return repeatable;
+  }
+
   bool run_asset_discovery_read_only() {
     if (!mounted_) return false;
     auto dir = std::unique_ptr<FF_DIR>(new (std::nothrow) FF_DIR{});

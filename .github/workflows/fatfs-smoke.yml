@@ -34,11 +34,11 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Install pinned ESPHome
         run: python -m pip install "esphome==2026.9.1"
-      - name: Validate isolated non-private fixture
-        run: esphome config tests/fatfs-smoke.yaml
-      - name: Compile isolated FatFs adapter
-        run: esphome compile tests/fatfs-smoke.yaml
-      - name: Validate opt-in read-only asset discovery
-        run: esphome config tests/asset-discovery-smoke.yaml
-      - name: Compile read-only asset discovery variant
-        run: esphome compile tests/asset-discovery-smoke.yaml
+      - name: Validate all four read-only probe modes
+        run: |
+          esphome config tests/fatfs-smoke.yaml
+          esphome config tests/asset-discovery-smoke.yaml
+          esphome config tests/bounded-crc-smoke.yaml
+          esphome config tests/combined-readonly-smoke.yaml
+      - name: Compile combined storage acceptance (one C++ build)
+        run: esphome compile tests/combined-readonly-smoke.yaml
