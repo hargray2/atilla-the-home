@@ -353,9 +353,12 @@ class AtillaStorage : public Component {
     } else if (combined_readonly_probe_) {
       const bool inventory_ok = fatfs.run_asset_discovery_read_only();
       const bool crc_ok = inventory_ok && fatfs.run_bounded_file_crc_probe();
-      ESP_LOGI("atilla_storage", "COMBINED READ-ONLY %s discovery=%s crc=%s NO WRITES",
-               (inventory_ok && crc_ok) ? "PASS" : "FAIL",
-               inventory_ok ? "PASS" : "FAIL", crc_ok ? "PASS" : "FAIL");
+      const bool asset_ok = crc_ok && fatfs.run_asset_reader_acceptance_readonly();
+      ESP_LOGI("atilla_storage",
+               "COMBINED READ-ONLY %s discovery=%s crc=%s asset=%s NO WRITES",
+               (inventory_ok && crc_ok && asset_ok) ? "PASS" : "FAIL",
+               inventory_ok ? "PASS" : "FAIL", crc_ok ? "PASS" : "FAIL",
+               asset_ok ? "PASS" : "FAIL");
     } else if (bounded_crc_probe_) {
       const bool ok = fatfs.run_bounded_file_crc_probe();
       ESP_LOGI("atilla_storage", "FILE CRC READ-ONLY PROBE %s", ok ? "PASS" : "FAIL");
