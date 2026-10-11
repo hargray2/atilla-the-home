@@ -15,6 +15,7 @@ This public repository contains **custom external components, tests, and enginee
 - [Development, release and rollback workflow](docs/RELEASE-WORKFLOW.md)
 - [CI test strategy](docs/AUTOMATED-TESTS.md)
 - [Repository readiness checklist](docs/REPOSITORY-CHECKLIST.md)
+- [External component inventory](docs/COMPONENT-INVENTORY.md)
 - [Next-stage microSD asset roadmap](docs/SD-ASSET-ROADMAP.md)
 - [Hardware and pinout](docs/HARDWARE.md)
 - [Security and contribution guidance](docs/SECURITY-AND-CONTRIBUTING.md)
@@ -24,6 +25,7 @@ This public repository contains **custom external components, tests, and enginee
 ```text
 components/
   atilla_storage/          ESPHome component + FatFs read-only transport
+  atilla_radar_filter/     RainViewer precipitation palette adapter
 docs/                      Current and historical engineering notes
 tests/                     ESPHome/SD diagnostic smoke configurations
 .github/workflows/         Automated validation experiments
