@@ -1,0 +1,30 @@
+name: Radar palette regression
+
+on:
+  pull_request:
+    paths:
+      - "components/atilla_radar_filter/**"
+      - "tests/radar_palette_selftest.py"
+      - ".github/workflows/radar-palette.yml"
+  push:
+    branches:
+      - main
+      - "dev/**"
+      - "refactor/**"
+    paths:
+      - "components/atilla_radar_filter/**"
+      - "tests/radar_palette_selftest.py"
+      - ".github/workflows/radar-palette.yml"
+  workflow_dispatch:
+
+jobs:
+  palette:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify radar palette mapping
+        run: python tests/radar_palette_selftest.py
