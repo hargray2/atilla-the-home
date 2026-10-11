@@ -1,3 +1,5 @@
+# CI-only compile fixture. Generic ESP32-S3 GPIO chip selects are deliberately
+# NOT the real Waveshare CH422G EXIO4 routing. Never flash to the ATILLA panel.
 esphome:
   name: atilla-fatfs-smoke
   friendly_name: ATILLA FATFS Compiler Smoke Test
@@ -32,16 +34,16 @@ external_components:
     components: [atilla_storage]
 
 atilla_storage:
-  id: atilla_storage_46
+  id: atilla_storage_smoke
   card_device: atilla_sd_probe_device
   idle_device: atilla_sd_idle_clocks
   fatfs_mount_test: true
+  fatfs_batch_read_probe: true
   fatfs_file_read_test: false
   fatfs_entry_probe: false
   fatfs_fil_heap_probe: false
   fatfs_open_only_probe: false
-  fatfs_batch_read_probe: false
   fatfs_write_roundtrip_test: false
   storage_service_test: false
   storage_repeat_test: false
-  settings_persistence_probe: true
+  settings_persistence_probe: false
