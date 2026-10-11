@@ -39,6 +39,7 @@ atilla_storage:
   idle_device: atilla_sd_idle_clocks
   fatfs_mount_test: true
   fatfs_batch_read_probe: false
+  bounded_crc_probe: false
   asset_discovery_probe: true
   fatfs_file_read_test: false
   fatfs_entry_probe: false
