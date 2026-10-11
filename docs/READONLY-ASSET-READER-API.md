@@ -9,3 +9,9 @@ The API accepts one **basename only** within `/ATILLA`, a caller-supplied size c
 **Limits:** A cooperative 10-second elapsed-time guard checks between FatFs reads, but cannot interrupt a blocked read. CRC32 is appropriate for detecting accidental corruption, not cryptographic tampering. This is not a manifest loader, image renderer, general directory traversal or storage write service. Separately supplied expected CRC values must be obtained from trusted asset build metadata.
 
 **Next grouped acceptance:** After 4.7.9x hardware PASS, adapt the combined SD worker to exercise a known asset via this reusable function and validate expected CRC32, with one full firmware upload and one startup log rather than multiple separate test cycles.
+
+## Consolidated next hardware acceptance
+
+After the original 4.7.9x combined discovery+repeatability test passes on hardware, this branch adds a third check to that **same** one-shot storage worker: the reusable filename-restricted reader verifies `VERIFY.BIN` against the earlier observed CRC32 `5ACE03B3`, using exactly 16 x 256-byte chunks. `COMBINED READ-ONLY PASS` then requires all three checks. No additional worker, screen change, or SD write is introduced. The reference value is from prior device logs (not a separately trusted asset build), and a changed test file will deliberately fail the acceptance rather than be silently accepted.
+
+This branch is **not** the shipped 4.7.9x candidate. It requires its own one-time firmware compilation and hardware acceptance before release.
