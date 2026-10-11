@@ -1,6 +1,6 @@
 # ATILLA repository readiness checklist
 
-Checkpoint: private single-file firmware 4.7.9t; external SD component worker verified with 24 KB stack.
+Checkpoint: private single-file firmware 4.7.9u; external SD component worker verified with 24 KB stack.
 
 ## Currently available
 - [x] ESPHome custom component source (`components/atilla_storage`, Python schema, C++ and FatFs adapter).
@@ -17,7 +17,7 @@ Checkpoint: private single-file firmware 4.7.9t; external SD component worker ve
 - [ ] Decide how to retain private full firmware backups and release artifacts separately from the public repo.
 - [ ] Add validation tests for production-equivalent Waveshare SPI/CH422G wiring (without connecting physical hardware in CI).
 - [ ] Add bounded read-only asset discovery/streaming tests before implementing UI SD assets.
-- [x] Record 4.7.9t's observed panel compile, OTA/boot and early runtime acceptance. [ ] Capture full overhaul-branch Actions pass and run a longer panel soak before promotion.
+- [x] Record 4.7.9u's observed panel compile, boot and early runtime acceptance. [ ] Capture full overhaul-branch Actions pass and run a longer panel soak before promotion.
 
 ## CI truth table
 A green compile fixture means the *storage adapter* compiles for a generic ESP32-S3 test target. It does not prove the full private dashboard compiles or runs. Card operations in the fixture cannot validate the real Waveshare SD wiring. Never flash the CI fixture to the panel.
