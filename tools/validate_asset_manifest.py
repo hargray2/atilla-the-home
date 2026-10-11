@@ -36,7 +36,7 @@ def validate(data):
         if p in names:
             raise ValueError(f"asset {i}: repeated path")
         names.add(p)
-        if obj["kind"] not in ALLOWED_KINDS:
+        if not isinstance(obj["kind"], str) or obj["kind"] not in ALLOWED_KINDS:
             raise ValueError(f"asset {i}: unsupported kind")
         size = obj["bytes"]
         if type(size) is not int or not 1 <= size <= MAX_BYTES_PER_ASSET:
