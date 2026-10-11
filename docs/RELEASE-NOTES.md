@@ -1,16 +1,21 @@
 # ATILLA release notes (v4 onward)
 
-> Historic observations transcribed from project development. Experimental labels do not imply successful installation.
+This log distinguishes hardware-observed behavior from experimental proposals. Versions before v4 are intentionally excluded.
 
-| Version | Historical outcome |
+| Version | Evidence / status |
 |---|---|
-| 4.0.3 | Experimental large root directory scan; OTA rollback observed. |
-| 4.0.4 | Conservative one-sector delayed SD test succeeded. |
-| 4.0.5–4.2 | Read-only FAT32 diagnostics improved; directory and file CRC checks became repeatable. |
-| 4.2.1 | SD diagnostic delay reduced to around ten seconds and worked in testing. |
-| 4.3 | Paced map/radar downloads to improve TLS reliability. |
-| 4.4 | Added heap/PSRAM memory diagnostics. |
-| 4.5 | Added post-radar memory guard; retained stable, RAM-preloaded 12-tile map/radar and read-only SD test. |
-| 4.6 (in development) | GitHub ESPHome external component, SPI bindings and first source fixes. A successful full build and a filesystem mount are **not yet confirmed**. |
+| 4.0.3 | Experimental large root-directory scan; OTA rollback observed |
+| 4.0.4 | Conservative one-sector delayed SD diagnostic passed |
+| 4.0.5–4.2 | Read-only FAT32 and file-CRC diagnostics advanced |
+| 4.2.1 | Reduced SD diagnostic delay and observed success |
+| 4.3 | Added map and radar request pacing |
+| 4.4 | Added internal heap and PSRAM diagnostics |
+| 4.5 | Known-good earlier LVGL/map/radar dashboard |
+| 4.6–4.7 | External FatFs component and guarded storage experiments; not a production storage service |
+| 4.7.9p | Hardware: read-only FatFs mount, known-file CRC and five-phase batch read PASS; 666 ms main-loop warning and only 686 bytes of observed stack headroom |
+| 4.7.9q | Hardware: moved batch probe to 24,576-byte FreeRTOS worker; ~17,428 bytes minimum stack free; main-loop storage warning absent |
+| 4.7.9r | Hardware: weather networking moved into workers; weather TLS/validation FAILED; other subsystems passed |
+| 4.7.9s | Hardware: serialized HTTPS; weather received 200 bodies but FAIL due to response-length handling |
+| **4.7.9t** | **Hardware-validated checkpoint:** both weather workers PASS with LIVE / UPDATED, six CARTO basemap tiles, six RainViewer radar tiles, read-only FatFs batch PASS; ~4,895 kB PSRAM and ~100 kB internal heap free after startup |
 
-Pre-v4 releases are intentionally excluded. This is not a complete chronological changelog; it records milestones for which development evidence exists.
+The 4.7.9t acceptance record is in [VALIDATED-BASELINE-4.7.9t.md](VALIDATED-BASELINE-4.7.9t.md). The complete device YAML remains private. Runtime logs establish early-operation success, not an extended reliability soak.
