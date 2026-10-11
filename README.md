@@ -13,6 +13,8 @@ This public repository contains **custom external components, tests, and enginee
 - [Repository structure and component responsibilities](docs/CURRENT-ARCHITECTURE.md)
 - [Verified hardware acceptance matrix](docs/VALIDATED-BASELINE-4.7.9t.md)
 - [Development, release and rollback workflow](docs/RELEASE-WORKFLOW.md)
+- [CI test strategy](docs/AUTOMATED-TESTS.md)
+- [Repository readiness checklist](docs/REPOSITORY-CHECKLIST.md)
 - [Next-stage microSD asset roadmap](docs/SD-ASSET-ROADMAP.md)
 - [Hardware and pinout](docs/HARDWARE.md)
 - [Security and contribution guidance](docs/SECURITY-AND-CONTRIBUTING.md)
