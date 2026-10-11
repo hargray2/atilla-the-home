@@ -4,14 +4,15 @@ ESPHome + LVGL dashboard for the **Waveshare ESP32-S3-Touch-LCD-7 Rev 1.2** (800
 
 ## Current project checkpoint
 
-**ATILLA 4.7.9t — hardware-validated 2026-10-11.** The device logs confirm secure background current-weather and forecast HTTPS requests, six CARTO map tile downloads/displays, six RainViewer radar tile downloads/decodes/displays, and read-only FatFs operations on a dedicated worker with a 24,576-byte stack. At idle after the initial imagery loads, approximately 4,895 kB PSRAM and 100 kB internal heap remained free in the observed log window.
+**ATILLA 4.7.9u — hardware-validated startup and core systems 2026-10-11.** The device logs confirm secure background current-weather and forecast HTTPS requests, six CARTO map tile downloads/displays, six RainViewer radar tile downloads/decodes/displays, and read-only FatFs operations on a dedicated worker with a 24,576-byte stack. At idle after the initial imagery loads, approximately 4,895 kB PSRAM and 100 kB internal heap remained free in the observed log window.
 
 This public repository contains **custom external components, tests, and engineering documentation**. The authoritative complete firmware is a **private, single `waveshare.yaml`**, supplied as a complete .txt/YAML file for ESPHome Builder. **Do not commit the complete private YAML or API keys here.** `main` is not the current hardware-validated firmware baseline.
 
 ## Start here
 
 - [Repository structure and component responsibilities](docs/CURRENT-ARCHITECTURE.md)
-- [Verified hardware acceptance matrix](docs/VALIDATED-BASELINE-4.7.9t.md)
+- [4.7.9u hardware acceptance](docs/VALIDATED-BASELINE-4.7.9u.md)
+- [Previous 4.7.9t hardware acceptance](docs/VALIDATED-BASELINE-4.7.9t.md)
 - [Development, release and rollback workflow](docs/RELEASE-WORKFLOW.md)
 - [CI test strategy](docs/AUTOMATED-TESTS.md)
 - [Repository readiness checklist](docs/REPOSITORY-CHECKLIST.md)
