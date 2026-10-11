@@ -40,7 +40,8 @@ def load_validator():
 class FatfsModes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.validate, cls.constants = load_validator()
+        validator, cls.constants = load_validator()
+        cls.validate = staticmethod(validator)
         cls.modes = [
             val for key, val in cls.constants.items()
             if key.startswith("CONF_FATFS_") and key not in ("CONF_FATFS_MOUNT_TEST",)
