@@ -516,6 +516,21 @@ class ReadOnlyFatFs {
     return ok;
   }
 
+  // Grouped acceptance for the reusable reader, with an observed checkpoint
+  // checksum. This supplements the previous raw repeatability test; it does
+  // not establish cryptographic authenticity of the underlying SD file.
+  bool run_asset_reader_acceptance_readonly() {
+    AssetDigest digest;
+    const bool ok = checksum_asset_readonly("VERIFY.BIN", 4096, digest,
+                                           0x5ACE03B3U, true);
+    ESP_LOGI("atilla_storage",
+             "ASSET READER %s filename=VERIFY.BIN bytes=%" PRIu32
+             " chunks=%" PRIu32 " crc32=%08" PRIX32
+             " expected=5ACE03B3 NO WRITES",
+             ok ? "PASS" : "FAIL", digest.size, digest.chunks, digest.crc32);
+    return ok && digest.size == 4096 && digest.chunks == 16;
+  }
+
   // Read a known, existing 4 KiB diagnostics file without ever opening it for write.
   // Two independent bounded passes must yield the same CRC32; this checks repeatability,
   // NOT authenticity against an independently supplied checksum.
