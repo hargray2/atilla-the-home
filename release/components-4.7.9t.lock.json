@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "baseline": "ATILLA 4.7.9t",
+  "hardware_validation_date": "2026-10-11",
+  "firmware": {
+    "location": "private complete waveshare.yaml outside the public repository",
+    "esphome_version": "2026.9.1",
+    "public_ci_compiles_complete_firmware": false
+  },
+  "external_components": [
+    {
+      "name": "atilla_storage",
+      "repository": "hargray2/atilla-the-home",
+      "verified_source_branch": "dev/sd-batch-worker-479q",
+      "verified_source_commit": "f89aaf125af9d080dca254236430f7ec73068fd5",
+      "verification": "hardware validated in 4.7.9t, read-only FatFs batch worker"
+    },
+    {
+      "name": "atilla_radar_filter",
+      "repository": "hargray2/atilla-the-home",
+      "verified_source_branch": "dev/radar-intensity",
+      "verified_source_commit": "55b166049a4bf9c7d7285842743d4955a6aeec87",
+      "verification": "4.7.9t reports filter startup, radar worker pixels and LVGL display; standalone compile gate pending"
+    }
+  ],
+  "notes": "This public manifest pins component source history, not credentials or firmware secrets. Never assume the overhaul branch is safe for a live device before independent hardware validation."
+}
