@@ -444,6 +444,78 @@ class ReadOnlyFatFs {
   }
   // Opt-in discovery only. No file data reads, no writes, no SD formatting.
   // Must execute from the existing dedicated SD worker with FatFs mounted.
+  // Reusable read-only asset checksum primitive. This never transfers asset data
+  // to the display and never enables filesystem writes.
+  struct AssetDigest {
+    uint32_t size{0};
+    uint32_t crc32{0};
+    uint32_t chunks{0};
+  };
+  bool checksum_asset_readonly(const char *basename, uint32_t max_bytes,
+                               AssetDigest &result,
+                               uint32_t expected_crc32 = 0,
+                               bool verify_expected = false) {
+    result = AssetDigest{};
+    if (!mounted_ || !basename || max_bytes == 0 || max_bytes > 1048576U)
+      return false;
+    // Only one plain filename inside /ATILLA: prohibit traversal, separators,
+    // FatFs drive prefixes, controls and unexpectedly long paths.
+    unsigned length = 0;
+    for (; basename[length] != 0 && length <= 48; ++length) {
+      const char c = basename[length];
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+        return false;
+    }
+    if (length == 0 || length > 48 || basename[0] == '.' ||
+        std::strstr(basename, "..") != nullptr)
+      return false;
+    char path[80];
+    const int written = std::snprintf(path, sizeof(path), "%s/ATILLA/%s",
+                                     drive_path_, basename);
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(path))
+      return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file) return false;
+    const FRESULT open_rc = f_open(file.get(), path, FA_READ);
+    if (open_rc != FR_OK) return false;
+    const FSIZE_t file_size = f_size(file.get());
+    bool ok = file_size > 0 && file_size <= max_bytes;
+    uint32_t crc = 0xffffffffU;
+    uint32_t total = 0;
+    uint32_t chunks = 0;
+    constexpr UINT kChunkBytes = 256;
+    constexpr uint32_t kMaxElapsedMs = 10000;
+    uint8_t buffer[kChunkBytes];
+    const uint32_t started = millis();
+    while (ok && total < file_size) {
+      // Deadline is cooperative: it does not interrupt a blocked FatFs call.
+      if (uint32_t(millis() - started) > kMaxElapsedMs) { ok = false; break; }
+      const UINT want = static_cast<UINT>(
+          (file_size - total) < kChunkBytes ? (file_size - total) : kChunkBytes);
+      UINT got = 0;
+      const FRESULT read_rc = f_read(file.get(), buffer, want, &got);
+      if (read_rc != FR_OK || got != want) { ok = false; break; }
+      for (UINT i = 0; i < got; ++i) {
+        crc ^= buffer[i];
+        for (unsigned bit = 0; bit < 8; ++bit)
+          crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+      }
+      total += got;
+      ++chunks;
+    }
+    const FRESULT close_rc = f_close(file.get());
+    ok = ok && close_rc == FR_OK && total == file_size;
+    if (ok) {
+      result.size = total;
+      result.crc32 = crc ^ 0xffffffffU;
+      result.chunks = chunks;
+      if (verify_expected && result.crc32 != expected_crc32)
+        ok = false;
+    }
+    return ok;
+  }
+
   // Read a known, existing 4 KiB diagnostics file without ever opening it for write.
   // Two independent bounded passes must yield the same CRC32; this checks repeatability,
   // NOT authenticity against an independently supplied checksum.
