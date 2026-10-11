@@ -23,3 +23,11 @@ Device: user-owned small ESP32 touchscreen photographed front/back; rear PCB mar
 On confirmed pinout: boot with one supported display driver, keep touch readable and Home Assistant API reachable; collect 2-minute startup log, available heap, largest block, Wi-Fi stability, and correct orientation. Only then add application pages.
 
 No private credentials, actual complete firmware YAML or precise location in the public repository.
+
+## Board identification update (2026-10-11)
+
+Owner confirms the only printed model number is `ESP32-2432S028`, and the supplied rear photo clearly shows both Micro-USB and USB-C. This identifies the dual-USB CYD family but **does not guarantee its LCD controller**. Public CYD2USB references disagree between ILI9341 and ST7789 panel variants; some need display color inversion. Use a reversible **first flash** with explicit boot fallback, and do not treat a white/black screen as evidence of a dead board. The factory demonstration currently operates, so take a factory firmware backup first where feasible.
+
+Widely documented starting pinout to check during first bring-up: TFT HSPI CLK GPIO14, MOSI GPIO13, CS GPIO15, DC GPIO2, BL GPIO21; XPT2046 touch independent SPI CLK GPIO25, MOSI GPIO32, MISO GPIO39, CS GPIO33, IRQ GPIO36. Avoid assuming TFT reset GPIO4: some revisions wire GPIO4 to the RGB LED and LCD reset to EN instead. Flashing and bootloader button behavior also vary between USB bridges. Exact GPIO values require first-device confirmation.
+
+**Next step:** create isolated firmware config for one LCD candidate and on-screen visual/touch identification; keep the choice swappable to the alternative controller without changing application logic. Do not reuse the ESP32-S3 Waveshare SPI, PSRAM or CH422G assumptions.
