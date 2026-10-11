@@ -29,3 +29,7 @@ One compiled complete private firmware; one installation; one startup log showin
 ## Host-side validation hardening
 
 The draft manifest validator now rejects duplicate JSON keys, manifests larger than 16 KiB, case-insensitive FAT name collisions and extension/MIME mismatches, in addition to prior bounded paths, counts, sizes and CRC syntax. `tests/test_asset_manifest.py` exercises these constraints in CI. **This is not a firmware manifest parser** and does not imply the manifest or image files exist on the SD card. Parser complexity, on-card CRC verification and user-provisioned fixture preparation are still required before the next flash.
+
+## Synthetic host fixture (added after delayed milestone)
+
+Run `python tools/build_sd_test_fixture.py /tmp/atilla-fixture` on a computer to create `/tmp/atilla-fixture/ATILLA/manifest.json` and a deterministic 1x1 PNG at `/tmp/atilla-fixture/ATILLA/icons/atilla-test.png`. The manifest's declared size and CRC32 are calculated from the actual PNG bytes; `tests/test_sd_fixture.py` checks them. **This tool writes only to the supplied computer directory, never to a connected SD card.** It refuses to overwrite existing fixture files. The fixture is for the later manifest reader's acceptance and is not required to be copied until that reader is ready. The firmware-side parser and nested path support remain unimplemented.
