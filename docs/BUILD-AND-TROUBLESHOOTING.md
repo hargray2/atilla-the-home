@@ -1,51 +1,30 @@
 # ESPHome build and troubleshooting
 
-## Installation workflow
+## Current checkpoint
 
-ATILLA is managed via iPhone and Home Assistant ESPHome Builder. The production configuration is one large `waveshare.yaml`; GitHub stores additional component source retrieved at **build time**. Do not ask the user to manually copy C++ headers to the ESPHome filesystem.
+The private complete `waveshare.yaml` for ATILLA 4.7.9t compiled and passed early hardware runtime checks using **ESPHome 2026.9.1**. It is not checked into GitHub. Both the storage and radar filter custom components are present in the overhaul branch; isolated CI does not build the private dashboard.
 
-A representative external-component section is:
+Current external component source commits and verification scope are recorded in [the lock manifest](../release/components-4.7.9t.lock.json).
 
-```yaml
-external_components:
-  - source: github://hargray2/atilla-the-home@main
-    refresh: 0s
-    components: [atilla_storage]
-```
+## Installation rules
 
-`refresh: 0s` requests a fresh Git repository check for every validation/build. Once releases stabilize, pin to a tested Git tag/commit rather than mutable `main`.
+The device is managed from iPhone through Home Assistant ESPHome Builder. Preserve the **complete working private YAML** as rollback and never flash `tests/fatfs-smoke.yaml` or `tests/radar-filter-smoke.yaml` onto the panel (their generic GPIO mappings are CI-only, not Waveshare CH422G wiring).
 
-## Failure history
+Changing an external component Git branch or commit can affect validation and compilation. `refresh: 0s` requests a cache refresh but is not an immutable version pin. For a release, record the full commit SHA and the complete private YAML, not just its version label.
 
-### Validation: AttributeError, SPI device class
+## Historical resolved errors
 
-```text
-AttributeError: module 'esphome.components.spi_device'
-has no attribute 'SPIDeviceComponent'
-```
+- `spi_device.SPIDeviceComponent` AttributeError: Python integration uses `spi_device.spi_device`.
+- `atilla_storage` ambiguous namespace: fixed by consolidating namespace declarations.
+- FatFs test flags: require `fatfs_mount_test: true` plus **at most one** read probe mode.
+- 4.7.9p storage main-loop overrun/stack warning: 4.7.9q's dedicated 24 KB worker passed.
+- Weather 4.7.9r TLS verification error: 4.7.9s serialized connections.
+- Weather 4.7.9s HTTP 200 bodies marked failed: 4.7.9t fixed unknown Content-Length handling; workers PASS.
 
-Cause: Python config schema referenced `spi_device.SPIDeviceComponent`, while ESPHome 2026.9.1 defines the codegen type as `spi_device.spi_device`. Fixed for both `card_device` and `idle_device` on GitHub.
+## Diagnostics for future failures
 
-### Clean Build Files failed with the same AttributeError
+Separate failures by phase: YAML parser, ESPHome Validate, component compile, OTA flash, and runtime test. Record the **first meaningful compiler error**, not the last Ninja failure line. Confirm component commit IDs, logs and actual hardware behavior. Redact API keys, Wi-Fi credentials, secrets, private coordinates and query tokens from any public report.
 
-ESPHome must first load the configuration (including cached external Python modules), so a broken cached module may prevent the Clean command from proceeding. ESPHome 2026.9.1 external components default to a one-day refresh. Set `refresh: 0s` and validate again to retrieve the fix. An unchanged error may mean a stale repository cache or a different ref; confirm the fetched file contents.
+## CI limitations
 
-### C++ compile: ambiguous `atilla_storage` namespace
-
-```text
-error: reference to 'atilla_storage' is ambiguous
-```
-
-The original header declared a global `namespace atilla_storage` as well as `namespace esphome::atilla_storage`. Generated `main.cpp` encountered both. The header was updated to put the transport in `esphome::atilla_storage` as well. **The user has not yet reported a successful new build after this fix.**
-
-### TLS connection failures during radar preload
-
-Earlier rapid tile requests caused SSL/setup resource errors or HTTP connection failures. Historical stable transfer gaps were ~1.5 seconds (map) and ~4 seconds (radar); do not tighten them casually.
-
-### OTA rollback
-
-A more aggressive FAT32 directory scan in the 4.0.3 experiment was followed by rollback. Conservatively limited sector reads later succeeded. An OTA rollback cannot alone establish the precise root cause.
-
-## Reporting future errors
-
-Record ESPHome version, current Git commit or tag, first meaningful compiler error (not only Ninja's final failure), and whether Validate, Compile, or OTA Install failed. **Redact secrets, API keys, Wi-Fi credentials, access tokens, private IP information if sensitive, and query parameters from map URLs.**
+Storage and radar smoke tests are isolated compile fixtures. Passing them does not prove complete device YAML compilation, full LVGL page function, actual CH422G SD wiring or runtime multi-day stability. See [automated tests](AUTOMATED-TESTS.md).
