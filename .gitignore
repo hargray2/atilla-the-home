@@ -1,0 +1,40 @@
+# ESPHome-generated build output
+.esphome/
+.pioenvs/
+.piolibdeps/
+platformio/
+build/
+dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Binary firmware artifacts
+*.bin
+*.elf
+*.map
+*.uf2
+*.ota
+*.partitions.bin
+
+# Private panel configuration and secrets
+waveshare.yaml
+secrets.yaml
+*.secrets.yaml
+*.private.yaml
+*.local.yaml
+*.local.yml
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local IDE and host state
+.DS_Store
+.idea/
+.vscode/
