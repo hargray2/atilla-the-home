@@ -1,6 +1,6 @@
 # SD-backed dashboard assets: combined release gate
 
-**State:** design and host-side contract only. No new panel firmware or SD writes. The 4.7.9y combined read-only worker is hardware-validated; the pending PR #4 promotion must finish separately.
+**State:** design and host-side contract only. No new panel firmware or SD writes. The 4.7.9y combined read-only worker is hardware-validated; PR #4 is now merged into `main`.
 
 ## One larger milestone, not one flash per test
 
@@ -25,3 +25,7 @@ A future opt-in worker test should exercise, in one FatFs mount and one firmware
 One compiled complete private firmware; one installation; one startup log showing combined SD PASS, manifest file/CRC PASS, no writes, weather current/forecast PASS, six CARTO tiles and six radar tiles, and no reboot. Longer soak and touchscreen interactions remain independent advisories.
 
 **Rollback:** 4.7.9y is the latest hardware-tested checkpoint. Do not alter the deployed component pin until a subsequent candidate is fully compiled.
+
+## Host-side validation hardening
+
+The draft manifest validator now rejects duplicate JSON keys, manifests larger than 16 KiB, case-insensitive FAT name collisions and extension/MIME mismatches, in addition to prior bounded paths, counts, sizes and CRC syntax. `tests/test_asset_manifest.py` exercises these constraints in CI. **This is not a firmware manifest parser** and does not imply the manifest or image files exist on the SD card. Parser complexity, on-card CRC verification and user-provisioned fixture preparation are still required before the next flash.
