@@ -46,6 +46,12 @@ inline bool inspect_verified_png(const uint8_t *data, uint32_t size,
   out.crc32 = expected_crc;
   return true;
 }
+// Cache buffers can cross from the SD worker to the main loop only when the
+// read pilot was requested, FatFs unmounted successfully, and data is owned.
+inline bool handoff_ready(bool read_pilot_enabled, bool unmount_ok,
+                          bool buffer_owned) {
+  return read_pilot_enabled && unmount_ok && buffer_owned;
+}
 inline bool valid_request(unsigned slot, uint32_t len) {
   return slot >= 1 && slot <= 9999 && len >= 45 && len <= kMaxCompressedBytes;
 }
