@@ -15,6 +15,7 @@
 #include "diskio_impl.h"
 #include "atilla_storage.h"
 #include "asset_manifest_parser.h"
+#include "cache_asset_contract.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -445,6 +446,142 @@ class ReadOnlyFatFs {
   }
   // Opt-in discovery only. No file data reads, no writes, no SD formatting.
   // Must execute from the existing dedicated SD worker with FatFs mounted.
+  // Cache transaction pilot. The only writable paths are fixed 8.3 slots under
+  // /ATILLA/CACHE. Content arrives as a caller-owned immutable, bounded PNG
+  // buffer. No arbitrary URL, path or overwrite is accepted here.
+  bool verify_cache_file_(const char *path, uint32_t size, uint32_t expected_crc) {
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file || f_open(file.get(), path, FA_READ) != FR_OK) return false;
+    bool ok = f_size(file.get()) == size;
+    uint8_t buffer[256];
+    uint32_t crc = 0xffffffffU, total = 0;
+    const uint32_t started = millis();
+    while (ok && total < size) {
+      if (uint32_t(millis() - started) > 10000U) { ok = false; break; }
+      const UINT want = static_cast<UINT>((size - total) < sizeof(buffer)
+                                           ? size - total : sizeof(buffer));
+      UINT got = 0;
+      if (f_read(file.get(), buffer, want, &got) != FR_OK || got != want) {
+        ok = false;
+        break;
+      }
+      for (UINT i = 0; i < got; ++i) {
+        crc ^= buffer[i];
+        for (unsigned b = 0; b < 8; ++b)
+          crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+      }
+      total += got;
+    }
+    const FRESULT close_rc = f_close(file.get());
+    return ok && close_rc == FR_OK && total == size &&
+           (crc ^ 0xffffffffU) == expected_crc;
+  }
+
+  // SINGLE-FILE, EXPLICITLY OPT-IN FAT32 write pilot, not automatic downloads.
+  // f_sync + readback protect against ordinary short writes. FAT32 is not a
+  // journaled filesystem; a power failure DURING a transaction can still
+  // corrupt it. We do not delete .TMP files or overwrite .PNG files.
+  bool store_cache_png_once(unsigned slot, const uint8_t *png, uint32_t bytes,
+                             uint32_t expected_crc) {
+    cache::Paths paths;
+    if (!mounted_ || writes_active_ ||
+        !cache::make_paths(drive_path_, slot, paths) ||
+        !cache::is_png(png, bytes) ||
+        cache::crc32(png, bytes) != expected_crc) {
+      ESP_LOGE("atilla_storage", "CACHE PILOT: invalid source/path/CRC or mount");
+      return false;
+    }
+    FILINFO info{};
+    const FRESULT final_rc = f_stat(paths.committed, &info);
+    if (final_rc == FR_OK) {
+      // A prior boot already committed this immutable file. Verify only.
+      const bool verified = verify_cache_file_(paths.committed, bytes, expected_crc);
+      ESP_LOGI("atilla_storage", "CACHE PILOT EXISTING %s slot=%u NO WRITES",
+               verified ? "PASS" : "FAIL", slot);
+      return verified;
+    }
+    if (final_rc != FR_NO_FILE || f_stat(paths.pending, &info) != FR_NO_FILE) {
+      ESP_LOGW("atilla_storage", "CACHE PILOT: stale pending/unknown file; refusing overwrite");
+      return false;
+    }
+    // Require an independently verified SDHC CSD and comfortable free space.
+    if (!sd_.verify_physical_capacity()) return false;
+    DWORD clusters = 0;
+    FATFS *volume = nullptr;
+    if (f_getfree(drive_path_, &clusters, &volume) != FR_OK || !volume ||
+        uint64_t(clusters) * volume->csize * 512ULL < uint64_t(bytes) * 2U + 131072ULL) {
+      ESP_LOGW("atilla_storage", "CACHE PILOT: insufficient or unknown free space");
+      return false;
+    }
+    if (!sd_.enable_test_writes()) return false;
+    writes_active_ = true;
+    // Function-local lambda guarantees both software write gates are reset
+    // on all ordinary return paths, including a short write or rename failure.
+    const bool result = [&]() -> bool {
+      FRESULT dir_rc = f_stat(paths.directory, &info);
+      if (dir_rc == FR_NO_FILE) {
+        dir_rc = f_mkdir(paths.directory);
+        if (dir_rc != FR_OK) return false;
+      } else if (dir_rc != FR_OK || !(info.fattrib & AM_DIR)) {
+        return false;
+      }
+      // Recheck names after enabling writes; never FA_CREATE_ALWAYS.
+      if (f_stat(paths.committed, &info) != FR_NO_FILE ||
+          f_stat(paths.pending, &info) != FR_NO_FILE) return false;
+      auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+      if (!file || f_open(file.get(), paths.pending, FA_WRITE | FA_CREATE_NEW) != FR_OK)
+        return false;
+      bool wrote = true;
+      uint32_t position = 0;
+      const uint32_t started = millis();
+      while (position < bytes) {
+        if (uint32_t(millis() - started) > 10000U) { wrote = false; break; }
+        const UINT amount = static_cast<UINT>((bytes - position) < 256 ? bytes - position : 256);
+        UINT done = 0;
+        if (f_write(file.get(), png + position, amount, &done) != FR_OK ||
+            done != amount) { wrote = false; break; }
+        position += done;
+      }
+      const FRESULT sync_rc = wrote ? f_sync(file.get()) : FR_DISK_ERR;
+      const FRESULT close_rc = f_close(file.get());
+      if (!wrote || sync_rc != FR_OK || close_rc != FR_OK) {
+        ESP_LOGE("atilla_storage", "CACHE PILOT: stage write/sync/close failed; preserving TMP");
+        return false;
+      }
+      if (!verify_cache_file_(paths.pending, bytes, expected_crc)) {
+        ESP_LOGE("atilla_storage", "CACHE PILOT: readback CRC mismatch; preserving TMP");
+        return false;
+      }
+      if (f_stat(paths.committed, &info) != FR_NO_FILE ||
+          f_rename(paths.pending, paths.committed) != FR_OK) {
+        ESP_LOGE("atilla_storage", "CACHE PILOT: commit refused/failed; preserving evidence");
+        return false;
+      }
+      return verify_cache_file_(paths.committed, bytes, expected_crc);
+    }();
+    writes_active_ = false;
+    sd_.disable_test_writes();
+    ESP_LOGI("atilla_storage", "CACHE WRITE PILOT %s slot=%u bytes=%" PRIu32
+             " crc32=%08" PRIX32 " writes_disabled=YES", result ? "PASS" : "FAIL",
+             slot, bytes, expected_crc);
+    return result;
+  }
+
+  bool run_cache_write_pilot() {
+    // Deterministic, 70-byte, 1x1 RGBA PNG matching the validated SD fixture.
+    // This embedded test graphic is a stand-in for a future HTTPS download.
+    static constexpr uint8_t png[] = {
+      0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0x00,0x00,0x00,0x0d,
+      0x49,0x48,0x44,0x52,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,
+      0x08,0x06,0x00,0x00,0x00,0x1f,0x15,0xc4,0x89,0x00,0x00,0x00,
+      0x0d,0x49,0x44,0x41,0x54,0x78,0x9c,0x63,0x90,0xc9,0x5f,
+      0xf2,0x1f,0x00,0x04,0x09,0x02,0x2f,0x43,0x1f,0x6a,0x9a,
+      0x00,0x00,0x00,0x00,0x49,0x45,0x4e,0x44,0xae,0x42,0x60,0x82
+    };
+    constexpr uint32_t kTestCrc = 0xf60d2e27U;
+    return store_cache_png_once(1, png, sizeof(png), kTestCrc);
+  }
+
   // Verify one manifest-declared nested asset (never a write operation).
   // Path must have been accepted by the strict manifest parser first.
   bool checksum_manifest_entry_(const manifest::Entry &entry) {
