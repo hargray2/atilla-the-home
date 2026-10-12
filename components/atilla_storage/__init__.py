@@ -29,6 +29,8 @@ CONF_CACHE_WRITE_PILOT = "cache_write_pilot"
 CONF_HTTPS_CACHE_PILOT = "https_cache_pilot"
 CONF_CACHE_READ_PILOT = "cache_read_pilot"
 CONF_CACHE_SCREEN_PILOT = "cache_screen_pilot"
+CONF_COLOR_HTTPS_PILOT = "color_https_pilot"
+CONF_COLOR_SCREEN_PILOT = "color_screen_pilot"
 CONF_FATFS_WRITE_ROUNDTRIP_TEST = "fatfs_write_roundtrip_test"
 CONF_STORAGE_SERVICE_TEST = "storage_service_test"
 CONF_STORAGE_REPEAT_TEST = "storage_repeat_test"
@@ -37,7 +39,7 @@ CONF_SETTINGS_PERSISTENCE_PROBE = "settings_persistence_probe"
 def validate_fatfs_test_flags(config):
     active = sum(bool(config[key]) for key in (
         CONF_FATFS_ENTRY_PROBE, CONF_FATFS_FIL_HEAP_PROBE,
-        CONF_FATFS_OPEN_ONLY_PROBE, CONF_FATFS_BATCH_READ_PROBE, CONF_ASSET_DISCOVERY_PROBE, CONF_BOUNDED_CRC_PROBE, CONF_COMBINED_READONLY_PROBE, CONF_MANIFEST_READONLY_PROBE, CONF_CACHE_WRITE_PILOT, CONF_HTTPS_CACHE_PILOT, CONF_CACHE_READ_PILOT, CONF_CACHE_SCREEN_PILOT,
+        CONF_FATFS_OPEN_ONLY_PROBE, CONF_FATFS_BATCH_READ_PROBE, CONF_ASSET_DISCOVERY_PROBE, CONF_BOUNDED_CRC_PROBE, CONF_COMBINED_READONLY_PROBE, CONF_MANIFEST_READONLY_PROBE, CONF_CACHE_WRITE_PILOT, CONF_HTTPS_CACHE_PILOT, CONF_CACHE_READ_PILOT, CONF_CACHE_SCREEN_PILOT, CONF_COLOR_HTTPS_PILOT, CONF_COLOR_SCREEN_PILOT,
         CONF_FATFS_WRITE_ROUNDTRIP_TEST, CONF_STORAGE_SERVICE_TEST, CONF_STORAGE_REPEAT_TEST, CONF_SETTINGS_PERSISTENCE_PROBE,
         CONF_FATFS_FILE_READ_TEST))
     if active > 1:
@@ -64,6 +66,8 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Optional(CONF_HTTPS_CACHE_PILOT, default=False): cv.boolean,
     cv.Optional(CONF_CACHE_READ_PILOT, default=False): cv.boolean,
     cv.Optional(CONF_CACHE_SCREEN_PILOT, default=False): cv.boolean,
+    cv.Optional(CONF_COLOR_HTTPS_PILOT, default=False): cv.boolean,
+    cv.Optional(CONF_COLOR_SCREEN_PILOT, default=False): cv.boolean,
     cv.Optional(CONF_FATFS_WRITE_ROUNDTRIP_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_SERVICE_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_REPEAT_TEST, default=False): cv.boolean,
@@ -98,6 +102,8 @@ async def to_code(config):
     cg.add(var.set_https_cache_pilot(config[CONF_HTTPS_CACHE_PILOT]))
     cg.add(var.set_cache_read_pilot(config[CONF_CACHE_READ_PILOT]))
     cg.add(var.set_cache_screen_pilot(config[CONF_CACHE_SCREEN_PILOT]))
+    cg.add(var.set_color_https_pilot(config[CONF_COLOR_HTTPS_PILOT]))
+    cg.add(var.set_color_screen_pilot(config[CONF_COLOR_SCREEN_PILOT]))
     cg.add(var.set_fatfs_write_roundtrip_test(config[CONF_FATFS_WRITE_ROUNDTRIP_TEST]))
     cg.add(var.set_storage_service_test(config[CONF_STORAGE_SERVICE_TEST]))
     cg.add(var.set_storage_repeat_test(config[CONF_STORAGE_REPEAT_TEST]))
