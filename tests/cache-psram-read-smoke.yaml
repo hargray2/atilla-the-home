@@ -1,0 +1,56 @@
+# CI-only compile fixture. Generic ESP32-S3 GPIO chip selects are deliberately
+# NOT the real Waveshare CH422G EXIO4 routing. Never flash to the ATILLA panel.
+esphome:
+  name: atilla-cache-read
+  friendly_name: ATILLA SD to PSRAM Verified Cached PNG Reader Compile
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+spi:
+  id: sd_bus
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  miso_pin: GPIO13
+
+spi_device:
+  - id: atilla_sd_probe_device
+    spi_id: sd_bus
+    cs_pin: GPIO10
+    data_rate: 200kHz
+  - id: atilla_sd_idle_clocks
+    spi_id: sd_bus
+    cs_pin: GPIO14
+    data_rate: 200kHz
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [atilla_storage]
+
+atilla_storage:
+  id: atilla_storage_smoke
+  card_device: atilla_sd_probe_device
+  idle_device: atilla_sd_idle_clocks
+  fatfs_mount_test: true
+  fatfs_batch_read_probe: false
+  combined_readonly_probe: false
+  manifest_readonly_probe: false
+  cache_write_pilot: false
+  https_cache_pilot: false
+  cache_read_pilot: true
+  bounded_crc_probe: false
+  asset_discovery_probe: false
+  fatfs_file_read_test: false
+  fatfs_entry_probe: false
+  fatfs_fil_heap_probe: false
+  fatfs_open_only_probe: false
+  fatfs_write_roundtrip_test: false
+  storage_service_test: false
+  storage_repeat_test: false
+  settings_persistence_probe: false

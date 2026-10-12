@@ -16,6 +16,8 @@
 #include "atilla_storage.h"
 #include "asset_manifest_parser.h"
 #include "cache_asset_contract.h"
+#include "cache_image_contract.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -446,6 +448,67 @@ class ReadOnlyFatFs {
   }
   // Opt-in discovery only. No file data reads, no writes, no SD formatting.
   // Must execute from the existing dedicated SD worker with FatFs mounted.
+  // Owner of the compressed, CRC-verified read-only PNG bytes. The caller must
+  // keep this buffer alive while any future LVGL decoder uses it.
+  struct CachedPng {
+    struct FreePsram {
+      void operator()(uint8_t *ptr) const { if (ptr) heap_caps_free(ptr); }
+    };
+    std::unique_ptr<uint8_t, FreePsram> data{};
+    cache_image::Metadata meta{};
+  };
+
+  // A deliberately read-only path to an existing immutable cache slot.
+  // Must run with FatFs mounted in the sole dedicated SD worker. No deletion,
+  // directory creation, source download or write gate enabling is performed.
+  bool load_cache_png_readonly(unsigned slot, uint32_t expected_bytes,
+                               uint32_t expected_crc, CachedPng &out) {
+    out = CachedPng{};
+    cache::Paths paths;
+    if (!mounted_ || writes_active_ ||
+        !cache_image::valid_request(slot, expected_bytes) ||
+        !cache::make_paths(drive_path_, slot, paths)) return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file || f_open(file.get(), paths.committed, FA_READ) != FR_OK) {
+      ESP_LOGW("atilla_storage", "CACHE PSRAM READ: no existing committed slot=%u", slot);
+      return false;
+    }
+    const bool length_ok = f_size(file.get()) == expected_bytes;
+    std::unique_ptr<uint8_t, CachedPng::FreePsram> bytes(
+        length_ok ? static_cast<uint8_t *>(heap_caps_malloc(
+                        expected_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))
+                  : nullptr);
+    bool ok = length_ok && bool(bytes);
+    uint32_t total = 0;
+    const uint32_t start = millis();
+    while (ok && total < expected_bytes) {
+      if (uint32_t(millis() - start) > 10000U) { ok = false; break; }
+      const UINT amount = static_cast<UINT>(
+          (expected_bytes - total) < 256U ? (expected_bytes - total) : 256U);
+      UINT got = 0;
+      if (f_read(file.get(), bytes.get() + total, amount, &got) != FR_OK ||
+          got != amount) {
+        ok = false;
+        break;
+      }
+      total += got;
+    }
+    const FRESULT close_rc = f_close(file.get());
+    cache_image::Metadata meta{};
+    if (!ok || close_rc != FR_OK || total != expected_bytes ||
+        !cache_image::inspect_verified_png(bytes.get(), total, expected_crc, meta)) {
+      ESP_LOGW("atilla_storage", "CACHE PSRAM READ FAIL slot=%u NO WRITES", slot);
+      return false;
+    }
+    out.data = std::move(bytes);
+    out.meta = meta;
+    ESP_LOGI("atilla_storage",
+             "CACHE PSRAM READ PASS slot=%u bytes=%" PRIu32
+             " crc32=%08" PRIX32 " dimensions=%ux%u NO WRITES",
+             slot, meta.bytes, meta.crc32, meta.width, meta.height);
+    return true;
+  }
+
   // Cache transaction pilot. The only writable paths are fixed 8.3 slots under
   // /ATILLA/CACHE. Content arrives as a caller-owned immutable, bounded PNG
   // buffer. No arbitrary URL, path or overwrite is accepted here.
@@ -979,14 +1042,16 @@ class ReadOnlyFatFs {
     ESP_LOGI("atilla_storage", "FATFS file bytes verified against known-good raw-sector CRC");
     return true;
   }
-  void unmount() {
+  // Report unmount failure so a verified SD buffer is never published while
+  // the filesystem's teardown status is unknown. Revoke writes in either case.
+  bool unmount() {
     if (!mounted_) {
       if (active_ == this) {
         ff_diskio_register(drive_, nullptr);
         active_ = nullptr;
         drive_ = FF_DRV_NOT_USED;
       }
-      return;
+      return true;
     }
     const uint32_t unmount_started = millis();
     const FRESULT unmount_rc = f_mount(nullptr, drive_path_, 0);
@@ -998,6 +1063,7 @@ class ReadOnlyFatFs {
     mounted_ = false;
     active_ = nullptr;
     drive_ = FF_DRV_NOT_USED;
+    return unmount_rc == FR_OK;
   }
   ~ReadOnlyFatFs() { unmount(); }
   ReadOnlyFatFs(const ReadOnlyFatFs &) = delete;

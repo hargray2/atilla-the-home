@@ -38,6 +38,8 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_asset_contract.cpp -o /tmp/atilla-cache-tests && /tmp/atilla-cache-tests
       - name: Native C++ HTTPS graphics safety tests
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_graphics_download_contract.cpp -o /tmp/atilla-graphics-tests && /tmp/atilla-graphics-tests
+      - name: Native C++ SD cache image contract tests
+        run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_image_contract.cpp -o /tmp/atilla-cache-image-tests && /tmp/atilla-cache-image-tests
       - name: Install pinned ESPHome
         run: python -m pip install "esphome==2026.9.1"
       - name: Validate all four read-only probe modes
@@ -49,5 +51,6 @@ jobs:
           esphome config tests/manifest-readonly-smoke.yaml
           esphome config tests/cache-write-pilot-smoke.yaml
           esphome config tests/https-graphics-cache-smoke.yaml
+          esphome config tests/cache-psram-read-smoke.yaml
       - name: Compile combined storage acceptance (one C++ build)
-        run: esphome compile tests/https-graphics-cache-smoke.yaml
+        run: esphome compile tests/cache-psram-read-smoke.yaml
