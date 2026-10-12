@@ -1,6 +1,6 @@
 # ATILLA SD-to-LVGL preview pilot — private full-panel integration required
 
-**Status: DRAFT, OFF by default, CI-only until reviewed. DO NOT FLASH the GPIO smoke fixture.** This branch is based on PR #10 (`dev/sd-cache-verified-reader-handoff`), itself dependent on draft PR #9.
+**Status: DRAFT, OFF by default, private 4.7.9ac full-panel hardware preview PASSED on 2026-10-12; pending final review/merge. DO NOT FLASH the generic GPIO smoke fixture.** This branch is based on PR #10 (`dev/sd-cache-verified-reader-handoff`), itself dependent on draft PR #9.
 
 ## What is implemented
 
@@ -22,6 +22,26 @@ CACHE SCREEN MAIN-LOOP PASS slot=2 bytes=70 NO WRITES (preview callback=SET)
 ```
 
 On the preview page, a single RGBA(28,111,164,255) pixel may be displayed as a deliberately enlarged blue RGB565 square. **This is a proof of the complete previous HTTPS download → immutable SD file → verify/reopen → decode → LVGL pathway**, not a production graphics cache, a large image, or a RAM replacement.
+
+## Hardware acceptance — private full-panel 4.7.9ac, 2026-10-12
+
+User reported seeing the expected blue square. A private ESPHome 2026.9.1 log (not committed, because it contains private environment identifiers) includes:
+
+```text
+CACHE PSRAM READ PASS slot=2 bytes=70 crc32=F60D2E27 dimensions=1x1 NO WRITES
+CACHE PSRAM LOAD OVERALL PASS slot=2 NO WRITES
+FATFS f_unmount result=0 elapsed=0 ms
+FATFS unmounted
+CACHE PSRAM POST-UNMOUNT PASS published-to-main-loop NO WRITES
+CACHE SCREEN MAIN-LOOP PASS slot=2 bytes=70 NO WRITES (preview callback=SET)
+SD LVGL PREVIEW PASS slot=2 decoded=1x1 expanded=128x128 RGB565 psram_bytes=32768
+```
+
+The attached private log also showed two weather worker PASS responses, six CARTO HTTPS/map-display PASS pairs and six radar PNG decode/display PASS results. Free internal heap returned to approximately 100 kB; free PSRAM stabilized around 4.86 MB following all six radar tiles. Intermittent ESPHome interval warnings remain (including 332 ms around one radar handoff), so latency optimization is outstanding.
+
+**Acceptance scope:** The pinned 70-byte image was downloaded to slot 2 and persisted in prior 4.7.9ab testing; 4.7.9ac demonstrates **read-only SD-to-screen** display of that existing asset, not a fresh graphics download during this boot. The software gate requires clean unmount before publication. Worker/main-loop log lines can appear interleaved; do not interpret their print ordering as a guarantee of task synchronization.
+
+No arbitrary image decoding, production cache scheduling or general PSRAM offload was validated by this tiny fixture. PR #9, #10 and #11 remain dependent drafts until code/release review.
 
 ## Safety constraints and next stages
 
