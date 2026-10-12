@@ -14,6 +14,10 @@ static constexpr uint8_t kFixture[70] = {
 };
 
 int main() {
+  assert(!tls_clock_ready(0));
+  assert(!tls_clock_ready(1767225599LL));
+  assert(tls_clock_ready(1767225600LL));
+  assert(tls_clock_ready(1791763200LL));
   assert(approved_url(kUrl));
   assert(!approved_url(nullptr));
   assert(!approved_url("http://raw.githubusercontent.com/example.png"));
