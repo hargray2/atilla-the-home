@@ -207,6 +207,7 @@ class AtillaStorage : public Component {
   void set_manifest_readonly_probe(bool enabled) { manifest_readonly_probe_ = enabled; }
   void set_cache_write_pilot(bool enabled) { cache_write_pilot_ = enabled; }
   void set_https_cache_pilot(bool enabled) { https_cache_pilot_ = enabled; }
+  void set_cache_read_pilot(bool enabled) { cache_read_pilot_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -218,7 +219,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_ || cache_read_pilot_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -334,6 +335,7 @@ class AtillaStorage : public Component {
   }
   void run_fatfs_test_(ReadOnlySD &sd) {
     graphics_https::Download verified_download;
+    experimental::ReadOnlyFatFs::CachedPng verified_cache_png;
     if (https_cache_pilot_ && !graphics_https::download_public_test_asset(verified_download)) {
       ESP_LOGW("atilla_storage", "HTTPS CACHE: refusing SD writes because download failed");
       return;
@@ -347,7 +349,12 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (https_cache_pilot_) {
+    if (cache_read_pilot_) {
+      const bool ok = fatfs.load_cache_png_readonly(1, 70, 0xF60D2E27U,
+                                                    verified_cache_png);
+      ESP_LOGI("atilla_storage", "CACHE PSRAM LOAD OVERALL %s NO WRITES",
+               ok ? "PASS" : "FAIL");
+    } else if (https_cache_pilot_) {
       const bool ok = fatfs.store_cache_png_once(
           graphics_fetch::kCacheSlot, verified_download.bytes.get(),
           verified_download.size, graphics_fetch::kExpectedCrc32);
@@ -420,6 +427,15 @@ class AtillaStorage : public Component {
     }
     fatfs.unmount();
     ESP_LOGI("atilla_storage", "FATFS unmounted");
+    if (cache_read_pilot_ && verified_cache_png.data) {
+      // Future LVGL transport will move this ownership to the UI consumer;
+      // this acceptance stage proves memory remains valid after unmount.
+      const bool good = cache_image::crc32(verified_cache_png.data.get(),
+                        verified_cache_png.meta.bytes) == verified_cache_png.meta.crc32;
+      ESP_LOGI("atilla_storage", "CACHE PSRAM POST-UNMOUNT %s bytes=%" PRIu32
+               " NO WRITES (not displayed)", good ? "PASS" : "FAIL",
+               verified_cache_png.meta.bytes);
+    }
   }
   void dump_config() override {
     ESP_LOGCONFIG("atilla_storage", "ATILLA external storage: FatFs opt-in=%s cache-write pilot=%s; no automatic downloads",
@@ -442,6 +458,7 @@ class AtillaStorage : public Component {
   bool manifest_readonly_probe_{false};
   bool cache_write_pilot_{false};
   bool https_cache_pilot_{false};
+  bool cache_read_pilot_{false};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
