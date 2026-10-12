@@ -1,6 +1,6 @@
 #pragma once
-// ATILLA THE HOME 4.6 — experimental READ-ONLY SD SPI transport.
-// NOT FATFS. NOT YET COMPILE-TESTED ON ESPHome 2026.9.1.
+// ATILLA THE HOME — guarded SD SPI transport; read-only by default.
+// Explicit opt-in pilot can issue limited writes after CSD capacity validation.
 // Existing ESPHome SPIDevice instances handle CH422G EXIO4 chip select.
 #include <cstdint>
 #include <cinttypes>
@@ -150,7 +150,7 @@ class ReadOnlySD {
   uint32_t partition_start() const {return partition_start_;}
   uint32_t partition_sectors() const {return partition_sectors_;}
   bool initialized() const {return initialized_;}
-  // No write command or filesystem modification is exposed.
+  // Sector writes require both an explicit opt-in and verified card capacity.
  private:
   Bus card_,idle_;
   bool initialized_{false};
@@ -204,6 +204,7 @@ class AtillaStorage : public Component {
   void set_bounded_crc_probe(bool enabled) { bounded_crc_probe_ = enabled; }
   void set_combined_readonly_probe(bool enabled) { combined_readonly_probe_ = enabled; }
   void set_manifest_readonly_probe(bool enabled) { manifest_readonly_probe_ = enabled; }
+  void set_cache_write_pilot(bool enabled) { cache_write_pilot_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -215,7 +216,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -339,7 +340,11 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (settings_persistence_probe_) {
+    if (cache_write_pilot_) {
+      // Explicit opt-in; never included in a read-only mode by accident.
+      const bool ok = fatfs.run_cache_write_pilot();
+      ESP_LOGI("atilla_storage", "CACHE WRITE PILOT OVERALL %s", ok ? "PASS" : "FAIL");
+    } else if (settings_persistence_probe_) {
       const bool ok = fatfs.run_settings_persistence_probe();
       ESP_LOGI("atilla_storage", "ATILLA SETTINGS PERSISTENCE %s",ok?"PASS":"FAIL");
     } else if (storage_repeat_test_) {
@@ -404,7 +409,8 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS unmounted");
   }
   void dump_config() override {
-    ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
+    ESP_LOGCONFIG("atilla_storage", "ATILLA external storage: FatFs opt-in=%s cache-write pilot=%s; no automatic downloads",
+                  fatfs_mount_test_ ? "YES" : "NO", cache_write_pilot_ ? "ENABLED" : "DISABLED");
   }
  protected:
   spi_device::SPIDeviceComponent *card_{nullptr};
@@ -421,6 +427,7 @@ class AtillaStorage : public Component {
   bool bounded_crc_probe_{false};
   bool combined_readonly_probe_{false};
   bool manifest_readonly_probe_{false};
+  bool cache_write_pilot_{false};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};

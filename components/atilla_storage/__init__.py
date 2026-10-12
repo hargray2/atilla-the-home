@@ -25,6 +25,7 @@ CONF_ASSET_DISCOVERY_PROBE = "asset_discovery_probe"
 CONF_BOUNDED_CRC_PROBE = "bounded_crc_probe"
 CONF_COMBINED_READONLY_PROBE = "combined_readonly_probe"
 CONF_MANIFEST_READONLY_PROBE = "manifest_readonly_probe"
+CONF_CACHE_WRITE_PILOT = "cache_write_pilot"
 CONF_FATFS_WRITE_ROUNDTRIP_TEST = "fatfs_write_roundtrip_test"
 CONF_STORAGE_SERVICE_TEST = "storage_service_test"
 CONF_STORAGE_REPEAT_TEST = "storage_repeat_test"
@@ -33,7 +34,7 @@ CONF_SETTINGS_PERSISTENCE_PROBE = "settings_persistence_probe"
 def validate_fatfs_test_flags(config):
     active = sum(bool(config[key]) for key in (
         CONF_FATFS_ENTRY_PROBE, CONF_FATFS_FIL_HEAP_PROBE,
-        CONF_FATFS_OPEN_ONLY_PROBE, CONF_FATFS_BATCH_READ_PROBE, CONF_ASSET_DISCOVERY_PROBE, CONF_BOUNDED_CRC_PROBE, CONF_COMBINED_READONLY_PROBE, CONF_MANIFEST_READONLY_PROBE,
+        CONF_FATFS_OPEN_ONLY_PROBE, CONF_FATFS_BATCH_READ_PROBE, CONF_ASSET_DISCOVERY_PROBE, CONF_BOUNDED_CRC_PROBE, CONF_COMBINED_READONLY_PROBE, CONF_MANIFEST_READONLY_PROBE, CONF_CACHE_WRITE_PILOT,
         CONF_FATFS_WRITE_ROUNDTRIP_TEST, CONF_STORAGE_SERVICE_TEST, CONF_STORAGE_REPEAT_TEST, CONF_SETTINGS_PERSISTENCE_PROBE,
         CONF_FATFS_FILE_READ_TEST))
     if active > 1:
@@ -56,6 +57,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Optional(CONF_BOUNDED_CRC_PROBE, default=False): cv.boolean,
     cv.Optional(CONF_COMBINED_READONLY_PROBE, default=False): cv.boolean,
     cv.Optional(CONF_MANIFEST_READONLY_PROBE, default=False): cv.boolean,
+    cv.Optional(CONF_CACHE_WRITE_PILOT, default=False): cv.boolean,
     cv.Optional(CONF_FATFS_WRITE_ROUNDTRIP_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_SERVICE_TEST, default=False): cv.boolean,
     cv.Optional(CONF_STORAGE_REPEAT_TEST, default=False): cv.boolean,
@@ -81,6 +83,7 @@ async def to_code(config):
     cg.add(var.set_bounded_crc_probe(config[CONF_BOUNDED_CRC_PROBE]))
     cg.add(var.set_combined_readonly_probe(config[CONF_COMBINED_READONLY_PROBE]))
     cg.add(var.set_manifest_readonly_probe(config[CONF_MANIFEST_READONLY_PROBE]))
+    cg.add(var.set_cache_write_pilot(config[CONF_CACHE_WRITE_PILOT]))
     cg.add(var.set_fatfs_write_roundtrip_test(config[CONF_FATFS_WRITE_ROUNDTRIP_TEST]))
     cg.add(var.set_storage_service_test(config[CONF_STORAGE_SERVICE_TEST]))
     cg.add(var.set_storage_repeat_test(config[CONF_STORAGE_REPEAT_TEST]))

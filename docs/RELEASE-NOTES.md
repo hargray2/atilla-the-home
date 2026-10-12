@@ -16,7 +16,8 @@ This log distinguishes hardware-observed behavior from experimental proposals. V
 | 4.7.9q | Hardware: moved batch probe to 24,576-byte FreeRTOS worker; ~17,428 bytes minimum stack free; main-loop storage warning absent |
 | 4.7.9r | Hardware: weather networking moved into workers; weather TLS/validation FAILED; other subsystems passed |
 | 4.7.9s | Hardware: serialized HTTPS; weather received 200 bodies but FAIL due to response-length handling |
-| **4.7.9z** | **Latest hardware-validated startup:** 4-entry /ATILLA scan, two-pass 4KiB CRC, reusable reader, manifest.json and on-card 70-byte PNG integrity verification, all six CARTO/radar tiles, weather current+forecast PASS. Read-only; no SD rendering yet. |
+| **4.7.9aa** | **Latest hardware-validated cache pilot:** one 70-byte PNG created/synced/readback-CRC-verified to an immutable FAT32 cache filename; second boot independently verified the same file read-only, without rewriting it. Weather, six CARTO, six radar tiles PASS. Explicit opt-in only; no HTTPS cache downloads or SD graphics display yet. |
+| 4.7.9z | **Latest hardware-validated startup:** 4-entry /ATILLA scan, two-pass 4KiB CRC, reusable reader, manifest.json and on-card 70-byte PNG integrity verification, all six CARTO/radar tiles, weather current+forecast PASS. Read-only; no SD rendering yet. |
 | 4.7.9y | **Latest hardware-validated startup:** one worker combines directory discovery, two-pass 4KiB CRC, and reusable bounded read-only asset reader; weather, CARTO and six radar tiles PASS. No writes; see advisories. |
 | 4.7.9x | Combined read-only diagnostic candidate, subsumed by the 4.7.9y hardware test |
 | 4.7.9w | Hardware-validated bounded two-pass 4KiB CRC reader |
@@ -24,7 +25,11 @@ This log distinguishes hardware-observed behavior from experimental proposals. V
 | 4.7.9u | Prior hardware-validated startup checkpoint: consolidated SHA-pinned storage+radar components, weather current+forecast, all 6 CARTO and radar tiles, read-only FatFs batch PASS; see advisories below |
 | 4.7.9t | **Hardware-validated checkpoint:** both weather workers PASS with LIVE / UPDATED, six CARTO basemap tiles, six RainViewer radar tiles, read-only FatFs batch PASS; ~4,895 kB PSRAM and ~100 kB internal heap free after startup |
 
-## Release advisories — 4.7.9z
+## Release advisories — 4.7.9aa
+
+See [4.7.9aa writable cache pilot](VALIDATED-BASELINE-4.7.9aa-WRITE-FIRST-PASS.md). The first on-device startup proved CSD capacity check, create-new staged PNG write, sync, CRC reread, rename and verification at slot 1. A subsequent restart of the same 4.7.9aa firmware returned `CACHE PILOT EXISTING PASS slot=1 NO WRITES`, `CACHE WRITE PILOT OVERALL PASS`, clean unmount and healthy weather + all six CARTO/radar tiles. This verifies **one small immutable file surviving one reboot**, not an unattended general-purpose write service, a long-duration soak, power-loss recovery, FAT32 integrity checks or HTTPS graphics caching. Keep full SD backup and 4.7.9z rollback. Main-loop display interval warnings and a Wi-Fi operation of 848ms remain outstanding.
+
+## Previous release advisories — 4.7.9z
 
 See [4.7.9z hardware acceptance](VALIDATED-BASELINE-4.7.9z.md). The one-shot manifest check (1 declared 70-byte PNG) passed on hardware in an existing 24,576-byte SD worker: complete directory scan, two consistent 4KiB CRCs, asset CRC, manifest CRC, clean unmount, weather, six CARTO and six radar tiles. No SD writes attempted and no SD image handed to LVGL. About 4,895 kB PSRAM / 100 kB internal heap remained after radar. Main-loop warnings include 489 ms intervals and a 1,444 ms API operation; longer soak, larger/multiple assets, card removal, touchscreen response and manifest hostility are not yet validated. ESPHome build flags were relocated to `esphome.build_flags`; runtime logs **do not** prove the compiler's old deprecation warning disappeared because cached config validation was skipped. Retain private 4.7.9y rollback.
 
