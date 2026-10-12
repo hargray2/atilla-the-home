@@ -42,6 +42,8 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_image_contract.cpp -o /tmp/atilla-cache-image-tests && /tmp/atilla-cache-image-tests
       - name: Native C++ multicolor PNG cache contract tests
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_color_asset_contract.cpp -o /tmp/atilla-color-tests && /tmp/atilla-color-tests
+      - name: Native C++ shared SD asset catalog regression tests
+        run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_asset_catalog.cpp -o /tmp/atilla-catalog-tests && /tmp/atilla-catalog-tests
       - name: Install pinned ESPHome
         run: python -m pip install "esphome==2026.9.1"
       - name: Validate all four read-only probe modes

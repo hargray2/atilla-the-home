@@ -15,7 +15,7 @@
 #include "esp_timer.h"
 #include "esphome/core/log.h"
 #include "graphics_download_contract.h"
-#include "color_asset_contract.h"
+#include "cache_asset_catalog.h"
 
 namespace esphome::atilla_storage::graphics_https {
 struct FreeBuffer {
@@ -27,17 +27,16 @@ struct Download {
   uint32_t size{0};
 };
 
-inline bool download_pinned_asset(Download &out, const char *url,
-                                  uint32_t expected_bytes, uint32_t expected_crc) {
+inline bool download_catalogued_asset(Download &out, cache_catalog::Id id) {
   out = Download{};
-  // Fail closed: this is NOT a general-purpose network downloader.
-  const bool slot2 = graphics_fetch::approved_url(url) &&
-      expected_bytes == graphics_fetch::kExpectedBytes &&
-      expected_crc == graphics_fetch::kExpectedCrc32;
-  const bool slot3 = color_asset::approved_url(url) &&
-      expected_bytes == color_asset::kBytes &&
-      expected_crc == color_asset::kCrc32;
-  if (!slot2 && !slot3) return false;
+  // Caller cannot supply a URL, file slot, length or CRC. The only accepted
+  // network origins are hard-pinned, hardware-tested catalog entries.
+  const cache_catalog::Spec *spec = cache_catalog::for_download(id);
+  if (!spec) return false;
+  const char *url = spec->url;
+  const uint32_t expected_bytes = spec->bytes;
+  const uint32_t expected_crc = spec->crc32;
+  const bool slot3 = id == cache_catalog::Id::ColorHttps;
   // The panel can start at 1969/1970 before the HA time source synchronizes.
   // Wait off the main loop; fail closed (and leave SD untouched) after 45s.
   const int64_t clock_start_us = esp_timer_get_time();
@@ -103,8 +102,8 @@ inline bool download_pinned_asset(Download &out, const char *url,
              "HTTPS CACHE FAIL: trusted test PNG network/TLS/length/CRC rejected");
     return false;
   }
-  if (slot3 && !color_asset::matches_png(bytes.get(), expected_bytes)) {
-    ESP_LOGW("atilla_storage", "HTTPS COLOR: fixed PNG format/CRC verification failed");
+  if (!cache_catalog::accepts(*spec, bytes.get(), expected_bytes)) {
+    ESP_LOGW("atilla_storage", "HTTPS CACHE: catalogued PNG format/CRC verification failed");
     return false;
   }
   out.bytes = std::move(bytes);
@@ -121,11 +120,9 @@ inline bool download_pinned_asset(Download &out, const char *url,
   return true;
 }
 inline bool download_public_test_asset(Download &out) {
-  return download_pinned_asset(out, graphics_fetch::kUrl,
-      graphics_fetch::kExpectedBytes, graphics_fetch::kExpectedCrc32);
+  return download_catalogued_asset(out, cache_catalog::Id::BlueHttps);
 }
 inline bool download_color_test_asset(Download &out) {
-  return download_pinned_asset(out, color_asset::kUrl,
-      color_asset::kBytes, color_asset::kCrc32);
+  return download_catalogued_asset(out, cache_catalog::Id::ColorHttps);
 }
 }  // namespace esphome::atilla_storage::graphics_https
