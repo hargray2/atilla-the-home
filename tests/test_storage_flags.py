@@ -47,7 +47,7 @@ class FatfsModes(unittest.TestCase):
             if key.startswith("CONF_FATFS_") and key not in ("CONF_FATFS_MOUNT_TEST",)
         ] + [
             cls.constants[k] for k in
-            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
+            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_MANIFEST_READONLY_PROBE", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
              "CONF_SETTINGS_PERSISTENCE_PROBE")
         ]
 
@@ -89,6 +89,7 @@ class FatfsModes(unittest.TestCase):
         header = HEADER.read_text(encoding="utf-8")
         dispatch = header.split("void loop() override", 1)[1].split("static void storage_worker_", 1)[0]
         self.assertIn("fatfs_batch_read_probe_", dispatch)
+        self.assertIn("manifest_readonly_probe_", dispatch)
         self.assertIn("xTaskCreatePinnedToCore", dispatch)
         self.assertRegex(dispatch, r"xTaskCreatePinnedToCore\([\s\S]*?24576")
 
