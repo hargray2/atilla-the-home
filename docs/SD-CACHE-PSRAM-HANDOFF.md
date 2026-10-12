@@ -1,6 +1,6 @@
 # SD graphics — verified cache-to-PSRAM read pilot
 
-**Status: draft firmware-side development only. This mode is OFF by default, not installed and not yet hardware tested.** It builds on the HTTPS-to-SD work in PR #9, which is not hardware accepted or merged. The only physical cache write/persistence verified so far is **4.7.9aa slot 1**.
+**Status: draft firmware-side development only. This mode is OFF by default, not installed and not yet hardware tested.** It builds on PR #9, whose private 4.7.9ab firmware passed the first HTTPS/slot-2 write test and the repeat-boot slot-2 NO WRITES test on 2026-10-12. PR #9 remains draft and unmerged pending final review; PR #10 is independently unmerged and unflashed.
 
 ## Implemented gate
 
@@ -11,7 +11,7 @@ A separate `cache_read_pilot: false` ESPHome test mode is available, mutually ex
 3. Requires file length to match, allocates exactly that many bytes in PSRAM (never a large stack array), and reads in at most 256-byte chunks with a cooperative elapsed-time cap.
 4. Rejects any short/error reads, missing files, wrong length, CRC mismatch, malformed PNG envelope, zero/oversized dimensions or unavailable PSRAM.
 5. Closes the file and returns an **RAII-owned compressed PNG buffer** and descriptive dimensions. All operations are read-only. The generic API caps compressed files at **256 KiB** and dimensions at **800×480**.
-6. Unmounts FAT32 and **atomically publishes ownership** of the PSRAM-backed compressed PNG to the ESPHome main loop. The main-loop consumer revalidates the PNG/CRC, logs the result, and then releases the owned buffer. No FatFs handle or raw worker stack pointer escapes. It does **not** yet render the image in LVGL or retain it permanently.
+6. Attempts to unmount FAT32. **Publication is blocked if unmount returns anything other than FR_OK**; the PSRAM buffer is then dropped by its owner. Only after successful unmount does it **atomically publish ownership** of the PSRAM-backed compressed PNG to the ESPHome main loop. The main-loop consumer revalidates the PNG/CRC, logs the result, and then releases the owned buffer. No FatFs handle or raw worker stack pointer escapes. It does **not** yet render the image in LVGL or retain it permanently.
 
 The expected logs in this opt-in future build are:
 
@@ -38,7 +38,7 @@ The read-only API's PNG header/IEND checks are **not a full decoder** and CRC32 
 ## Current release gates
 
 - **4.7.9aa**: one embedded 70-byte cache file written and verified, then independently reread across a reboot — hardware PASS.
-- **PR #9 / 4.7.9ab**: one pinned HTTPS 70-byte PNG to slot 2 — **hardware pending**, not merged.
-- **This branch**: read-only verified PSRAM loader for slot 1 — **CI pending, hardware pending**. Do not flash a CI-only smoke fixture: its generic GPIO CS wiring is not the real Waveshare CH422G configuration.
+- **PR #9 / 4.7.9ab**: pinned HTTPS 70-byte PNG to slot 2 — **first hardware HTTPS/write test PASS and second reboot existing-file NO WRITES PASS** on 2026-10-12; PR remains draft/unmerged pending review.
+- **This branch / PR #10**: read-only verified PSRAM loader for slot 1 — **hardware pending**; require fresh CI on the latest head. The handoff gate has a native C++ truth-table regression test; an unmount failure must block publication even after a successful PNG read. Do not flash a CI-only smoke fixture: its generic GPIO CS wiring is not the real Waveshare CH422G configuration.
 
 No production SD write service, auto-fetch loop, card cleanup or new LVGL rendering is activated by this draft. Keep a full card backup and private 4.7.9aa / 4.7.9z rollback files.
