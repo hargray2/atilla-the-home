@@ -47,7 +47,7 @@ class FatfsModes(unittest.TestCase):
             if key.startswith("CONF_FATFS_") and key not in ("CONF_FATFS_MOUNT_TEST",)
         ] + [
             cls.constants[k] for k in
-            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_MANIFEST_READONLY_PROBE", "CONF_CACHE_WRITE_PILOT", "CONF_HTTPS_CACHE_PILOT", "CONF_CACHE_READ_PILOT", "CONF_CACHE_SCREEN_PILOT", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
+            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_MANIFEST_READONLY_PROBE", "CONF_CACHE_WRITE_PILOT", "CONF_HTTPS_CACHE_PILOT", "CONF_CACHE_READ_PILOT", "CONF_CACHE_SCREEN_PILOT", "CONF_COLOR_HTTPS_PILOT", "CONF_COLOR_SCREEN_PILOT", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
              "CONF_SETTINGS_PERSISTENCE_PROBE")
         ]
 
@@ -96,6 +96,8 @@ class FatfsModes(unittest.TestCase):
         self.assertIn("https_cache_pilot_", dispatch)
         self.assertIn("cache_read_pilot_", dispatch)
         self.assertIn("cache_screen_pilot_", dispatch)
+        self.assertIn("color_https_pilot_", dispatch)
+        self.assertIn("color_screen_pilot_", dispatch)
         self.assertIn("xTaskCreatePinnedToCore", dispatch)
         self.assertRegex(dispatch, r"xTaskCreatePinnedToCore\([\s\S]*?24576")
 
@@ -105,19 +107,34 @@ class FatfsModes(unittest.TestCase):
         fatfs = (ROOT / "components/atilla_storage/fatfs_readonly.h").read_text(
             encoding="utf-8")
         self.assertIn("const bool unmount_ok = fatfs.unmount();", header)
-        self.assertIn("cache_image::handoff_ready(cache_read_pilot_ || cache_screen_pilot_, unmount_ok,", header)
+        self.assertIn("cache_image::handoff_ready(cache_read_pilot_ || cache_screen_pilot_ || color_screen_pilot_,", header)
         self.assertIn("bool unmount()", fatfs)
         self.assertIn("return unmount_rc == FR_OK;", fatfs)
 
 
     def test_preview_mode_is_bounded_and_read_only(self):
         header = HEADER.read_text(encoding="utf-8")
-        self.assertIn("const unsigned cache_slot = cache_screen_pilot_ ? 2U : 1U;", header)
-        self.assertIn("load_cache_png_readonly(cache_slot, 70, 0xF60D2E27U", header)
+        self.assertIn("const unsigned cache_slot = color_screen_pilot_ ? color_asset::kSlot :", header)
+        self.assertIn("load_cache_png_readonly(cache_slot, cache_bytes, cache_crc", header)
         self.assertIn("verified.width == 1 && verified.height == 1", header)
         self.assertIn("CACHE SCREEN MAIN-LOOP", header)
         self.assertIn("bool(verified_cache_png.data)", header)
         self.assertIn("cache_preview_callback_(cache_preview_context_, ready->data.get()", header)
+
+
+    def test_color_modes_require_exclusive_opt_in(self):
+        self.validate(self.config(["color_https_pilot"]))
+        self.validate(self.config(["color_screen_pilot"]))
+        for mode in ("https_cache_pilot", "cache_screen_pilot", "cache_read_pilot"):
+            with self.assertRaises(FakeCV.Invalid):
+                self.validate(self.config(["color_https_pilot", mode]))
+            with self.assertRaises(FakeCV.Invalid):
+                self.validate(self.config(["color_screen_pilot", mode]))
+        header = HEADER.read_text(encoding="utf-8")
+        self.assertIn("download_color_test_asset(verified_download)", header)
+        self.assertIn("color_asset::kSlot, verified_download.bytes.get()", header)
+        self.assertIn("color_asset::matches_png(ready->data.get(), verified.bytes)", header)
+        self.assertIn("COLOR SCREEN MAIN-LOOP", header)
 
 
 if __name__ == "__main__":

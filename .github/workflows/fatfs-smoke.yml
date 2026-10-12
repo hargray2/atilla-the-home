@@ -40,6 +40,8 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_graphics_download_contract.cpp -o /tmp/atilla-graphics-tests && /tmp/atilla-graphics-tests
       - name: Native C++ SD cache image contract tests
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_image_contract.cpp -o /tmp/atilla-cache-image-tests && /tmp/atilla-cache-image-tests
+      - name: Native C++ multicolor PNG cache contract tests
+        run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_color_asset_contract.cpp -o /tmp/atilla-color-tests && /tmp/atilla-color-tests
       - name: Install pinned ESPHome
         run: python -m pip install "esphome==2026.9.1"
       - name: Validate all four read-only probe modes
@@ -53,5 +55,7 @@ jobs:
           esphome config tests/https-graphics-cache-smoke.yaml
           esphome config tests/cache-psram-read-smoke.yaml
           esphome config tests/cache-screen-preview-smoke.yaml
+          esphome config tests/color-https-cache-smoke.yaml
+          esphome config tests/color-screen-preview-smoke.yaml
       - name: Compile combined storage acceptance (one C++ build)
-        run: esphome compile tests/cache-screen-preview-smoke.yaml
+        run: esphome compile tests/color-screen-preview-smoke.yaml
