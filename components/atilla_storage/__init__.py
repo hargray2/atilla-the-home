@@ -72,6 +72,8 @@ async def to_code(config):
     esp32.include_builtin_idf_component("esp_http_client")
     esp32.include_builtin_idf_component("esp-tls")
     esp32.include_builtin_idf_component("mbedtls")
+    # TLS validation must have an embedded trusted root certificate bundle.
+    esp32.add_idf_sdkconfig_option("CONFIG_MBEDTLS_CERTIFICATE_BUNDLE", True)
     esp32.require_fatfs()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
