@@ -16,14 +16,19 @@ This log distinguishes hardware-observed behavior from experimental proposals. V
 | 4.7.9q | Hardware: moved batch probe to 24,576-byte FreeRTOS worker; ~17,428 bytes minimum stack free; main-loop storage warning absent |
 | 4.7.9r | Hardware: weather networking moved into workers; weather TLS/validation FAILED; other subsystems passed |
 | 4.7.9s | Hardware: serialized HTTPS; weather received 200 bodies but FAIL due to response-length handling |
-| **4.7.9y** | **Latest hardware-validated startup:** one worker combines directory discovery, two-pass 4KiB CRC, and reusable bounded read-only asset reader; weather, CARTO and six radar tiles PASS. No writes; see advisories. |
+| **4.7.9z** | **Latest hardware-validated startup:** 4-entry /ATILLA scan, two-pass 4KiB CRC, reusable reader, manifest.json and on-card 70-byte PNG integrity verification, all six CARTO/radar tiles, weather current+forecast PASS. Read-only; no SD rendering yet. |
+| 4.7.9y | **Latest hardware-validated startup:** one worker combines directory discovery, two-pass 4KiB CRC, and reusable bounded read-only asset reader; weather, CARTO and six radar tiles PASS. No writes; see advisories. |
 | 4.7.9x | Combined read-only diagnostic candidate, subsumed by the 4.7.9y hardware test |
 | 4.7.9w | Hardware-validated bounded two-pass 4KiB CRC reader |
 | 4.7.9v | Hardware-validated /ATILLA directory discovery |
-| **4.7.9u** | **Latest hardware-validated startup checkpoint:** consolidated SHA-pinned storage+radar components, weather current+forecast, all 6 CARTO and radar tiles, read-only FatFs batch PASS; see advisories below |
+| 4.7.9u | Prior hardware-validated startup checkpoint: consolidated SHA-pinned storage+radar components, weather current+forecast, all 6 CARTO and radar tiles, read-only FatFs batch PASS; see advisories below |
 | 4.7.9t | **Hardware-validated checkpoint:** both weather workers PASS with LIVE / UPDATED, six CARTO basemap tiles, six RainViewer radar tiles, read-only FatFs batch PASS; ~4,895 kB PSRAM and ~100 kB internal heap free after startup |
 
-## Release advisories — 4.7.9y
+## Release advisories — 4.7.9z
+
+See [4.7.9z hardware acceptance](VALIDATED-BASELINE-4.7.9z.md). The one-shot manifest check (1 declared 70-byte PNG) passed on hardware in an existing 24,576-byte SD worker: complete directory scan, two consistent 4KiB CRCs, asset CRC, manifest CRC, clean unmount, weather, six CARTO and six radar tiles. No SD writes attempted and no SD image handed to LVGL. About 4,895 kB PSRAM / 100 kB internal heap remained after radar. Main-loop warnings include 489 ms intervals and a 1,444 ms API operation; longer soak, larger/multiple assets, card removal, touchscreen response and manifest hostility are not yet validated. ESPHome build flags were relocated to `esphome.build_flags`; runtime logs **do not** prove the compiler's old deprecation warning disappeared because cached config validation was skipped. Retain private 4.7.9y rollback.
+
+## Previous release advisories — 4.7.9y
 
 See [4.7.9y hardware acceptance](VALIDATED-BASELINE-4.7.9y.md). This is **initial hardware validation**, not a long soak. Verified /ATILLA entries, repeated 4KiB file CRC and a reusable read-only asset reader against the *observed*, not independently trusted, checksum `5ACE03B3`. No SD writes or LVGL file asset rendering, no preemptive filesystem I/O timeout, and recurring image-processing delays (~176–391 ms). Keep previous complete private releases for rollback; full firmware is never published.
 
