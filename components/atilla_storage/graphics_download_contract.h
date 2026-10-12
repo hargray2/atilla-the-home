@@ -13,6 +13,12 @@ constexpr uint32_t kExpectedBytes = 70;
 constexpr uint32_t kExpectedCrc32 = 0xF60D2E27U;
 constexpr unsigned kCacheSlot = 2;
 constexpr uint32_t kMaxNetworkAssetBytes = 1048576U;
+// ESP32 may boot at the Unix epoch until Home Assistant time arrives. TLS
+// certificate dates cannot be trusted before system time is synchronized.
+constexpr int64_t kMinTlsUnixTime = 1767225600LL;  // 2026-01-01 UTC
+inline bool tls_clock_ready(int64_t unix_time) {
+  return unix_time >= kMinTlsUnixTime;
+}
 inline bool approved_url(const char *url) {
   return url != nullptr && std::strcmp(url, kUrl) == 0;
 }
