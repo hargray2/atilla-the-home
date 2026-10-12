@@ -99,5 +99,15 @@ class FatfsModes(unittest.TestCase):
         self.assertRegex(dispatch, r"xTaskCreatePinnedToCore\([\s\S]*?24576")
 
 
+    def test_cache_handoff_is_blocked_when_unmount_fails(self):
+        header = HEADER.read_text(encoding="utf-8")
+        fatfs = (ROOT / "components/atilla_storage/fatfs_readonly.h").read_text(
+            encoding="utf-8")
+        self.assertIn("const bool unmount_ok = fatfs.unmount();", header)
+        self.assertRegex(header, r"cache_image::handoff_ready\(cache_read_pilot_, unmount_ok,")
+        self.assertIn("bool unmount()", fatfs)
+        self.assertIn("return unmount_rc == FR_OK;", fatfs)
+
+
 if __name__ == "__main__":
     unittest.main()
