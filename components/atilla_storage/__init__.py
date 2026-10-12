@@ -71,6 +71,7 @@ async def to_code(config):
     esp32.include_builtin_idf_component("fatfs")
     esp32.include_builtin_idf_component("esp_http_client")
     esp32.include_builtin_idf_component("esp-tls")
+    esp32.include_builtin_idf_component("mbedtls")
     esp32.require_fatfs()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
