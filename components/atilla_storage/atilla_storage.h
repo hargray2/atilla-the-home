@@ -1,6 +1,6 @@
 #pragma once
-// ATILLA THE HOME 4.6 — experimental READ-ONLY SD SPI transport.
-// NOT FATFS. NOT YET COMPILE-TESTED ON ESPHome 2026.9.1.
+// ATILLA THE HOME — guarded SD SPI transport; read-only by default.
+// Explicit opt-in pilot can issue limited writes after CSD capacity validation.
 // Existing ESPHome SPIDevice instances handle CH422G EXIO4 chip select.
 #include <cstdint>
 #include <cinttypes>
@@ -150,7 +150,7 @@ class ReadOnlySD {
   uint32_t partition_start() const {return partition_start_;}
   uint32_t partition_sectors() const {return partition_sectors_;}
   bool initialized() const {return initialized_;}
-  // No write command or filesystem modification is exposed.
+  // Sector writes require both an explicit opt-in and verified card capacity.
  private:
   Bus card_,idle_;
   bool initialized_{false};
@@ -409,7 +409,8 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS unmounted");
   }
   void dump_config() override {
-    ESP_LOGCONFIG("atilla_storage", "ATILLA external storage component: delayed READ-ONLY probe; no FATFS, no writes");
+    ESP_LOGCONFIG("atilla_storage", "ATILLA external storage: FatFs opt-in=%s cache-write pilot=%s; no automatic downloads",
+                  fatfs_mount_test_ ? "YES" : "NO", cache_write_pilot_ ? "ENABLED" : "DISABLED");
   }
  protected:
   spi_device::SPIDeviceComponent *card_{nullptr};
