@@ -79,6 +79,8 @@ class FatfsModes(unittest.TestCase):
         block = fixture.split("\natilla_storage:\n", 1)[1]
         parsed = dict(re.findall(r"^  (\w+): (true|false)$", block, re.M))
         config = {k: v == "true" for k, v in parsed.items()}
+        for mode in self.modes:
+            config.setdefault(mode, False)
         self.validate(config)
         self.assertTrue(config["fatfs_mount_test"])
         self.assertTrue(config["fatfs_batch_read_probe"])
