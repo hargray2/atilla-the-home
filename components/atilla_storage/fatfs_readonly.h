@@ -1042,14 +1042,16 @@ class ReadOnlyFatFs {
     ESP_LOGI("atilla_storage", "FATFS file bytes verified against known-good raw-sector CRC");
     return true;
   }
-  void unmount() {
+  // Report unmount failure so a verified SD buffer is never published while
+  // the filesystem's teardown status is unknown. Revoke writes in either case.
+  bool unmount() {
     if (!mounted_) {
       if (active_ == this) {
         ff_diskio_register(drive_, nullptr);
         active_ = nullptr;
         drive_ = FF_DRV_NOT_USED;
       }
-      return;
+      return true;
     }
     const uint32_t unmount_started = millis();
     const FRESULT unmount_rc = f_mount(nullptr, drive_path_, 0);
@@ -1061,6 +1063,7 @@ class ReadOnlyFatFs {
     mounted_ = false;
     active_ = nullptr;
     drive_ = FF_DRV_NOT_USED;
+    return unmount_rc == FR_OK;
   }
   ~ReadOnlyFatFs() { unmount(); }
   ReadOnlyFatFs(const ReadOnlyFatFs &) = delete;
