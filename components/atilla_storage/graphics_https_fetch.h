@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <ctime>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
@@ -26,6 +29,21 @@ struct Download {
 inline bool download_public_test_asset(Download &out) {
   out = Download{};
   if (!graphics_fetch::approved_url(graphics_fetch::kUrl)) return false;
+  // The panel can start at 1969/1970 before the HA time source synchronizes.
+  // Wait off the main loop; fail closed (and leave SD untouched) after 45s.
+  const int64_t clock_start_us = esp_timer_get_time();
+  bool reported_clock_wait = false;
+  while (!graphics_fetch::tls_clock_ready(static_cast<int64_t>(std::time(nullptr)))) {
+    if (!reported_clock_wait) {
+      ESP_LOGI("atilla_storage", "HTTPS CACHE: waiting for system clock before TLS");
+      reported_clock_wait = true;
+    }
+    if (esp_timer_get_time() - clock_start_us > 45000000LL) {
+      ESP_LOGW("atilla_storage", "HTTPS CACHE: no valid clock; skipping download and SD write");
+      return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(250));
+  }
   // Allocate in PSRAM, never reserve a 1 MiB network response on main-loop stack.
   Buffer bytes(static_cast<uint8_t *>(heap_caps_malloc(
       graphics_fetch::kExpectedBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
