@@ -12,6 +12,16 @@ static constexpr uint8_t kOnePixelPng[70] = {
   0x00,0x00,0x00,0x00,0x49,0x45,0x4e,0x44,0xae,0x42,0x60,0x82
 };
 int main() {
+  // Fail-closed handoff: no worker payload may escape until successful
+  // FatFs unmount, including the failure case with an otherwise valid PNG.
+  for (int read_mode = 0; read_mode < 2; ++read_mode) {
+    for (int unmounted = 0; unmounted < 2; ++unmounted) {
+      for (int owned = 0; owned < 2; ++owned) {
+        const bool allowed = read_mode && unmounted && owned;
+        assert(handoff_ready(read_mode, unmounted, owned) == allowed);
+      }
+    }
+  }
   assert(valid_request(1, 70));
   assert(valid_request(9999, 262144));
   assert(!valid_request(0, 70));
