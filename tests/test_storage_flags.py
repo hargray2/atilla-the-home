@@ -114,9 +114,9 @@ class FatfsModes(unittest.TestCase):
 
     def test_preview_mode_is_bounded_and_read_only(self):
         header = HEADER.read_text(encoding="utf-8")
-        self.assertIn("const unsigned cache_slot = color_screen_pilot_ ? color_asset::kSlot :", header)
-        self.assertIn("load_cache_png_readonly(cache_slot, cache_bytes, cache_crc", header)
-        self.assertIn("verified.width == 1 && verified.height == 1", header)
+        self.assertIn("const cache_catalog::Id id = color_screen_pilot_", header)
+        self.assertIn("spec->slot, spec->bytes, spec->crc32, verified_cache_png", header)
+        self.assertIn("cache_catalog::Id::BlueHttps", header)
         self.assertIn("CACHE SCREEN MAIN-LOOP", header)
         self.assertIn("bool(verified_cache_png.data)", header)
         self.assertIn("cache_preview_callback_(cache_preview_context_, ready->data.get()", header)
@@ -132,8 +132,8 @@ class FatfsModes(unittest.TestCase):
                 self.validate(self.config(["color_screen_pilot", mode]))
         header = HEADER.read_text(encoding="utf-8")
         self.assertIn("download_color_test_asset(verified_download)", header)
-        self.assertIn("color_asset::kSlot, verified_download.bytes.get()", header)
-        self.assertIn("color_asset::matches_png(ready->data.get(), verified.bytes)", header)
+        self.assertIn("spec->slot, verified_download.bytes.get()", header)
+        self.assertIn("cache_catalog::accepts(*spec, ready->data.get(), verified.bytes)", header)
         self.assertIn("COLOR SCREEN MAIN-LOOP", header)
 
 
