@@ -187,6 +187,7 @@ class ReadOnlySD {
 
 #include "fatfs_readonly.h"
 #include "graphics_https_fetch.h"
+#include "cache_asset_catalog.h"
 // ESPHome codegen integration: one delayed storage probe per boot.
 // Experimental storage-service mode uses a separate FreeRTOS worker stack.
 #include "esphome/core/component.h"
@@ -242,12 +243,11 @@ class AtillaStorage : public Component {
         const bool good = cache_image::inspect_verified_png(
             ready->data.get(), ready->meta.bytes, ready->meta.crc32, verified);
         if (cache_screen_pilot_) {
-          // First preview is deliberately limited to the 70-byte 1x1 blue
-          // pixel already downloaded to slot 2. Never hand arbitrary data
-          // to a decoder/widget from a filesystem worker.
-          const bool pinned = good && ready->meta.bytes == 70U &&
-                              verified.crc32 == 0xF60D2E27U &&
-                              verified.width == 1 && verified.height == 1;
+          // Never hand arbitrary data to a decoder/widget from the SD worker.
+          // The single-pixel screenshot still uses the same catalogued slot 2.
+          const auto *spec = cache_catalog::find(cache_catalog::Id::BlueHttps);
+          const bool pinned = good && spec &&
+              cache_catalog::accepts(*spec, ready->data.get(), verified.bytes);
           const bool displayed = pinned && cache_preview_callback_ != nullptr &&
               cache_preview_callback_(cache_preview_context_, ready->data.get(), verified.bytes,
                                       verified.width, verified.height);
@@ -257,11 +257,9 @@ class AtillaStorage : public Component {
                    displayed ? "PASS" : "FAIL", ready->meta.bytes,
                    cache_preview_callback_ ? "SET" : "MISSING");
         } else if (color_screen_pilot_) {
-          const bool pinned = good &&
-              ready->meta.bytes == color_asset::kBytes &&
-              verified.width == color_asset::kWidth &&
-              verified.height == color_asset::kHeight &&
-              color_asset::matches_png(ready->data.get(), verified.bytes);
+          const auto *spec = cache_catalog::find(cache_catalog::Id::ColorHttps);
+          const bool pinned = good && spec &&
+              cache_catalog::accepts(*spec, ready->data.get(), verified.bytes);
           const bool displayed = pinned && cache_preview_callback_ != nullptr &&
               cache_preview_callback_(cache_preview_context_, ready->data.get(),
                                       verified.bytes, verified.width, verified.height);
@@ -419,25 +417,23 @@ class AtillaStorage : public Component {
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
     if (cache_read_pilot_ || cache_screen_pilot_ || color_screen_pilot_) {
-      const unsigned cache_slot = color_screen_pilot_ ? color_asset::kSlot :
-                                  cache_screen_pilot_ ? 2U : 1U;
-      const uint32_t cache_bytes = color_screen_pilot_ ? color_asset::kBytes : 70U;
-      const uint32_t cache_crc = color_screen_pilot_ ?
-                                 color_asset::kCrc32 : 0xF60D2E27U;
-      const bool ok = fatfs.load_cache_png_readonly(cache_slot, cache_bytes, cache_crc,
-                                                     verified_cache_png);
+      const cache_catalog::Id id = color_screen_pilot_ ? cache_catalog::Id::ColorHttps :
+          cache_screen_pilot_ ? cache_catalog::Id::BlueHttps : cache_catalog::Id::BlueLocal;
+      const cache_catalog::Spec *spec = cache_catalog::find(id);
+      const bool ok = spec && fatfs.load_cache_png_readonly(
+          spec->slot, spec->bytes, spec->crc32, verified_cache_png);
       ESP_LOGI("atilla_storage", "CACHE PSRAM LOAD OVERALL %s slot=%u NO WRITES",
-               ok ? "PASS" : "FAIL", cache_slot);
+               ok ? "PASS" : "FAIL", spec ? spec->slot : 0U);
     } else if (color_https_pilot_) {
-      const bool ok = fatfs.store_cache_png_once(
-          color_asset::kSlot, verified_download.bytes.get(),
-          verified_download.size, color_asset::kCrc32);
+      const cache_catalog::Spec *spec = cache_catalog::for_download(cache_catalog::Id::ColorHttps);
+      const bool ok = spec && fatfs.store_cache_png_once(
+          spec->slot, verified_download.bytes.get(), verified_download.size, spec->crc32);
       ESP_LOGI("atilla_storage", "COLOR CACHE COMBINED %s slot=3 download=PASS card=%s",
                ok ? "PASS" : "FAIL", ok ? "PASS" : "FAIL");
     } else if (https_cache_pilot_) {
-      const bool ok = fatfs.store_cache_png_once(
-          graphics_fetch::kCacheSlot, verified_download.bytes.get(),
-          verified_download.size, graphics_fetch::kExpectedCrc32);
+      const cache_catalog::Spec *spec = cache_catalog::for_download(cache_catalog::Id::BlueHttps);
+      const bool ok = spec && fatfs.store_cache_png_once(
+          spec->slot, verified_download.bytes.get(), verified_download.size, spec->crc32);
       ESP_LOGI("atilla_storage", "HTTPS CACHE COMBINED %s download=PASS card=%s",
                ok ? "PASS" : "FAIL", ok ? "PASS" : "FAIL");
     } else if (cache_write_pilot_) {
