@@ -11,7 +11,7 @@ A separate `cache_read_pilot: false` ESPHome test mode is available, mutually ex
 3. Requires file length to match, allocates exactly that many bytes in PSRAM (never a large stack array), and reads in at most 256-byte chunks with a cooperative elapsed-time cap.
 4. Rejects any short/error reads, missing files, wrong length, CRC mismatch, malformed PNG envelope, zero/oversized dimensions or unavailable PSRAM.
 5. Closes the file and returns an **RAII-owned compressed PNG buffer** and descriptive dimensions. All operations are read-only. The generic API caps compressed files at **256 KiB** and dimensions at **800×480**.
-6. Unmounts FAT32. The acceptance mode then checks the PSRAM data CRC **again after unmount**, demonstrating that file handles and the SD stack are not backing the buffer. It immediately releases the owned buffer. It does **not** render into LVGL or introduce any persistent memory consumption.
+6. Unmounts FAT32 and **atomically publishes ownership** of the PSRAM-backed compressed PNG to the ESPHome main loop. The main-loop consumer revalidates the PNG/CRC, logs the result, and then releases the owned buffer. No FatFs handle or raw worker stack pointer escapes. It does **not** yet render the image in LVGL or retain it permanently.
 
 The expected logs in this opt-in future build are:
 
@@ -19,7 +19,8 @@ The expected logs in this opt-in future build are:
 CACHE PSRAM READ PASS slot=1 bytes=70 crc32=F60D2E27 dimensions=1x1 NO WRITES
 CACHE PSRAM LOAD OVERALL PASS NO WRITES
 FATFS unmounted
-CACHE PSRAM POST-UNMOUNT PASS bytes=70 NO WRITES (not displayed)
+CACHE PSRAM POST-UNMOUNT PASS published-to-main-loop NO WRITES
+CACHE MAIN-LOOP HANDOFF PASS bytes=70 dimensions=1x1 NO WRITES (not displayed)
 ```
 
 ## Why the display is not yet enabled
