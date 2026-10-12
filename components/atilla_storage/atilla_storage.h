@@ -215,7 +215,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
