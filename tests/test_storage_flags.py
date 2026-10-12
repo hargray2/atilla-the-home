@@ -47,7 +47,7 @@ class FatfsModes(unittest.TestCase):
             if key.startswith("CONF_FATFS_") and key not in ("CONF_FATFS_MOUNT_TEST",)
         ] + [
             cls.constants[k] for k in
-            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_MANIFEST_READONLY_PROBE", "CONF_CACHE_WRITE_PILOT", "CONF_HTTPS_CACHE_PILOT", "CONF_CACHE_READ_PILOT", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
+            ("CONF_ASSET_DISCOVERY_PROBE", "CONF_BOUNDED_CRC_PROBE", "CONF_COMBINED_READONLY_PROBE", "CONF_MANIFEST_READONLY_PROBE", "CONF_CACHE_WRITE_PILOT", "CONF_HTTPS_CACHE_PILOT", "CONF_CACHE_READ_PILOT", "CONF_CACHE_SCREEN_PILOT", "CONF_STORAGE_SERVICE_TEST", "CONF_STORAGE_REPEAT_TEST",
              "CONF_SETTINGS_PERSISTENCE_PROBE")
         ]
 
@@ -95,6 +95,7 @@ class FatfsModes(unittest.TestCase):
         self.assertIn("cache_write_pilot_", dispatch)
         self.assertIn("https_cache_pilot_", dispatch)
         self.assertIn("cache_read_pilot_", dispatch)
+        self.assertIn("cache_screen_pilot_", dispatch)
         self.assertIn("xTaskCreatePinnedToCore", dispatch)
         self.assertRegex(dispatch, r"xTaskCreatePinnedToCore\([\s\S]*?24576")
 
@@ -104,9 +105,19 @@ class FatfsModes(unittest.TestCase):
         fatfs = (ROOT / "components/atilla_storage/fatfs_readonly.h").read_text(
             encoding="utf-8")
         self.assertIn("const bool unmount_ok = fatfs.unmount();", header)
-        self.assertRegex(header, r"cache_image::handoff_ready\(cache_read_pilot_, unmount_ok,")
+        self.assertIn("cache_image::handoff_ready(cache_read_pilot_ || cache_screen_pilot_, unmount_ok,", header)
         self.assertIn("bool unmount()", fatfs)
         self.assertIn("return unmount_rc == FR_OK;", fatfs)
+
+
+    def test_preview_mode_is_bounded_and_read_only(self):
+        header = HEADER.read_text(encoding="utf-8")
+        self.assertIn("const unsigned cache_slot = cache_screen_pilot_ ? 2U : 1U;", header)
+        self.assertIn("load_cache_png_readonly(cache_slot, 70, 0xF60D2E27U", header)
+        self.assertIn("verified.width == 1 && verified.height == 1", header)
+        self.assertIn("CACHE SCREEN MAIN-LOOP", header)
+        self.assertIn("bool(verified_cache_png.data)", header)
+        self.assertIn("cache_preview_callback_(cache_preview_context_, ready->data.get()", header)
 
 
 if __name__ == "__main__":

@@ -52,5 +52,6 @@ jobs:
           esphome config tests/cache-write-pilot-smoke.yaml
           esphome config tests/https-graphics-cache-smoke.yaml
           esphome config tests/cache-psram-read-smoke.yaml
+          esphome config tests/cache-screen-preview-smoke.yaml
       - name: Compile combined storage acceptance (one C++ build)
-        run: esphome compile tests/cache-psram-read-smoke.yaml
+        run: esphome compile tests/cache-screen-preview-smoke.yaml
