@@ -8,6 +8,7 @@
   `assets/test/cache-test-1x1.png` (70 bytes, CRC32 `F60D2E27`).
 - The test endpoint is fixed in firmware using a full HTTPS URL with a commit hash. Caller-supplied URLs, user credentials and arbitrary hostnames are not supported.
 - The ESP-IDF HTTPS client verifies TLS using the certificate bundle, does not follow HTTP redirects, requires status **200** and known unchunked Content-Length **70**, and uses bounded reads.
+- The ESP32 may boot with an invalid 1969/1970 system date. The worker waits up to **45 seconds** for time synchronization before TLS validation. If no valid clock arrives, no network request or SD write is attempted.
 - A dedicated SD worker downloads into a **PSRAM-owned buffer**, verifies streamed CRC, PNG signature/IHDR dimensions and IEND marker. The independent pin to exactly `F60D2E27` is an accidental-corruption check; a future production authenticity catalog should use SHA-256 and signed metadata where needed.
 - Only after the HTTPS client is closed does the existing readback/commit path in PR #8 mount FatFs and write a **new, immutable cache slot 2**: `/ATILLA/CACHE/C0002.PNG`. Existing slot 1 is never overwritten.
 - The same storage logic refuses to overwrite a preexisting file or stale `.TMP`, stages with `FA_CREATE_NEW`, syncs, rereads and compares bytes/CRC, commits by rename and verifies again. On a repeated run an existing matching final file is read back only.
