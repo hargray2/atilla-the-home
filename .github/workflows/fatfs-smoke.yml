@@ -40,5 +40,6 @@ jobs:
           esphome config tests/asset-discovery-smoke.yaml
           esphome config tests/bounded-crc-smoke.yaml
           esphome config tests/combined-readonly-smoke.yaml
+          esphome config tests/manifest-readonly-smoke.yaml
       - name: Compile combined storage acceptance (one C++ build)
-        run: esphome compile tests/combined-readonly-smoke.yaml
+        run: esphome compile tests/manifest-readonly-smoke.yaml
