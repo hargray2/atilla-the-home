@@ -492,27 +492,32 @@ class ReadOnlyFatFs {
       return false;
     }
     FILINFO info{};
-    const FRESULT final_rc = f_stat(paths.committed, &info);
-    if (final_rc == FR_OK) {
-      // A prior boot already committed this immutable file. Verify only.
-      const bool verified = verify_cache_file_(paths.committed, bytes, expected_crc);
-      ESP_LOGI("atilla_storage", "CACHE PILOT EXISTING %s slot=%u NO WRITES",
-               verified ? "PASS" : "FAIL", slot);
-      return verified;
-    }
-    if (final_rc != FR_NO_FILE || f_stat(paths.pending, &info) != FR_NO_FILE) {
-      ESP_LOGW("atilla_storage", "CACHE PILOT: stale pending/unknown file; refusing overwrite");
+    const FRESULT directory_rc = f_stat(paths.directory, &info);
+    // FatFs returns FR_NO_PATH for files inside an absent directory.
+    // Explicitly distinguish first installation from an interrupted stage.
+    if (directory_rc != FR_NO_FILE &&
+        (directory_rc != FR_OK || !(info.fattrib & AM_DIR))) {
+      ESP_LOGW("atilla_storage", "CACHE PILOT: cache directory not usable");
       return false;
     }
-    // Require an independently verified SDHC CSD and comfortable free space.
+    if (directory_rc == FR_OK) {
+      const FRESULT final_rc = f_stat(paths.committed, &info);
+      if (final_rc == FR_OK) {
+        // A prior boot already committed this immutable file. Verify only.
+        const bool verified = verify_cache_file_(paths.committed, bytes, expected_crc);
+        ESP_LOGI("atilla_storage", "CACHE PILOT EXISTING %s slot=%u NO WRITES",
+                 verified ? "PASS" : "FAIL", slot);
+        return verified;
+      }
+      if (final_rc != FR_NO_FILE || f_stat(paths.pending, &info) != FR_NO_FILE) {
+        ESP_LOGW("atilla_storage", "CACHE PILOT: stale pending/unknown file; refusing overwrite");
+        return false;
+      }
+    }
+    // Require independently verified CSD capacity before permitting FAT writes.
+    // Deliberately avoid f_getfree on large SDXC/FAT32 media: when FAT FSInfo
+    // is absent it may synchronously scan millions of FAT entries.
     if (!sd_.verify_physical_capacity()) return false;
-    DWORD clusters = 0;
-    FATFS *volume = nullptr;
-    if (f_getfree(drive_path_, &clusters, &volume) != FR_OK || !volume ||
-        uint64_t(clusters) * volume->csize * 512ULL < uint64_t(bytes) * 2U + 131072ULL) {
-      ESP_LOGW("atilla_storage", "CACHE PILOT: insufficient or unknown free space");
-      return false;
-    }
     if (!sd_.enable_test_writes()) return false;
     writes_active_ = true;
     // Function-local lambda guarantees both software write gates are reset
