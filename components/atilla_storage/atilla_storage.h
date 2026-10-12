@@ -5,6 +5,10 @@
 #include <cstdint>
 #include <cinttypes>
 #include <cstring>
+#include <atomic>
+#include <memory>
+#include <new>
+#include <utility>
 #include "esphome/core/log.h"
 
 namespace esphome::atilla_storage {
@@ -217,6 +221,24 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "ATILLA SD read-only probe scheduled for +30 seconds");
   }
   void loop() override {
+    // This is the only consumer of the worker-owned frame pointer. Image bytes
+    // are never accessed by LVGL/ESPHome while FatFs has the SD mounted.
+    if (cache_read_pilot_) {
+      std::unique_ptr<experimental::ReadOnlyFatFs::CachedPng> ready(
+          cache_png_pending_.exchange(nullptr, std::memory_order_acq_rel));
+      if (ready && ready->data) {
+        cache_image::Metadata verified{};
+        const bool good = cache_image::inspect_verified_png(
+            ready->data.get(), ready->meta.bytes, ready->meta.crc32, verified);
+        ESP_LOGI("atilla_storage",
+                 "CACHE MAIN-LOOP HANDOFF %s bytes=%" PRIu32
+                 " dimensions=%ux%u NO WRITES (not displayed)",
+                 good ? "PASS" : "FAIL", ready->meta.bytes,
+                 ready->meta.width, ready->meta.height);
+        // Main-loop ownership expires here. A future LVGL widget must instead
+        // retain its owned decoded image buffer until the widget is destroyed.
+      }
+    }
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
     if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_ || cache_read_pilot_) {
@@ -428,13 +450,18 @@ class AtillaStorage : public Component {
     fatfs.unmount();
     ESP_LOGI("atilla_storage", "FATFS unmounted");
     if (cache_read_pilot_ && verified_cache_png.data) {
-      // Future LVGL transport will move this ownership to the UI consumer;
-      // this acceptance stage proves memory remains valid after unmount.
-      const bool good = cache_image::crc32(verified_cache_png.data.get(),
-                        verified_cache_png.meta.bytes) == verified_cache_png.meta.crc32;
-      ESP_LOGI("atilla_storage", "CACHE PSRAM POST-UNMOUNT %s bytes=%" PRIu32
-               " NO WRITES (not displayed)", good ? "PASS" : "FAIL",
-               verified_cache_png.meta.bytes);
+      // Transfer is explicitly one-way, and publication occurs only AFTER
+      // f_unmount: no live FATFS handle escapes the worker.
+      auto *handoff = new (std::nothrow) experimental::ReadOnlyFatFs::CachedPng(
+          std::move(verified_cache_png));
+      if (!handoff) {
+        ESP_LOGE("atilla_storage", "CACHE HANDOFF OOM; dropping frame NO WRITES");
+      } else {
+        auto *old = cache_png_pending_.exchange(handoff, std::memory_order_acq_rel);
+        delete old;
+        ESP_LOGI("atilla_storage",
+                 "CACHE PSRAM POST-UNMOUNT PASS published-to-main-loop NO WRITES");
+      }
     }
   }
   void dump_config() override {
@@ -459,6 +486,7 @@ class AtillaStorage : public Component {
   bool cache_write_pilot_{false};
   bool https_cache_pilot_{false};
   bool cache_read_pilot_{false};
+  std::atomic<experimental::ReadOnlyFatFs::CachedPng *> cache_png_pending_{nullptr};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
