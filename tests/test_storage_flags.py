@@ -117,7 +117,7 @@ class FatfsModes(unittest.TestCase):
         self.assertIn("verified.width == 1 && verified.height == 1", header)
         self.assertIn("CACHE SCREEN MAIN-LOOP", header)
         self.assertIn("bool(verified_cache_png.data)", header)
-        self.assertIn("cache_preview_callback_(ready->data.get()", header)
+        self.assertIn("cache_preview_callback_(cache_preview_context_, ready->data.get()", header)
 
 
 if __name__ == "__main__":
