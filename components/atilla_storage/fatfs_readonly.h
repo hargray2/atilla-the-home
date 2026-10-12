@@ -14,6 +14,7 @@
 #include "diskio.h"
 #include "diskio_impl.h"
 #include "atilla_storage.h"
+#include "asset_manifest_parser.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -444,6 +445,88 @@ class ReadOnlyFatFs {
   }
   // Opt-in discovery only. No file data reads, no writes, no SD formatting.
   // Must execute from the existing dedicated SD worker with FatFs mounted.
+  // Verify one manifest-declared nested asset (never a write operation).
+  // Path must have been accepted by the strict manifest parser first.
+  bool checksum_manifest_entry_(const manifest::Entry &entry) {
+    char path[120];
+    const int n = std::snprintf(path, sizeof(path), "%s/ATILLA/%s",
+                                drive_path_, entry.path);
+    if (n < 0 || static_cast<size_t>(n) >= sizeof(path)) return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file || f_open(file.get(), path, FA_READ) != FR_OK) return false;
+    const FSIZE_t length = f_size(file.get());
+    bool ok = length == entry.bytes && length != 0 && length <= 1048576U;
+    uint32_t crc = 0xffffffffU, total = 0;
+    const uint32_t started = millis();
+    uint8_t buffer[256];
+    while (ok && total < entry.bytes) {
+      if (uint32_t(millis() - started) > 10000U) { ok = false; break; }
+      const UINT wanted = static_cast<UINT>(
+          (entry.bytes - total) < sizeof(buffer) ? (entry.bytes - total) : sizeof(buffer));
+      UINT got = 0;
+      const FRESULT read_rc = f_read(file.get(), buffer, wanted, &got);
+      if (read_rc != FR_OK || got != wanted) { ok = false; break; }
+      for (UINT i = 0; i < got; ++i) {
+        crc ^= buffer[i];
+        for (unsigned b = 0; b < 8; ++b)
+          crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+      }
+      total += got;
+    }
+    const FRESULT closed = f_close(file.get());
+    return ok && closed == FR_OK && total == entry.bytes &&
+           (crc ^ 0xffffffffU) == entry.crc32;
+  }
+
+  // Opt-in, one-mount manifest + files integrity verification. The caller owns
+  // FatFs and must have already mounted it inside the dedicated SD worker.
+  bool verify_asset_manifest_readonly() {
+    if (!mounted_) return false;
+    char path[48];
+    const int n = std::snprintf(path, sizeof(path), "%s/ATILLA/manifest.json", drive_path_);
+    if (n < 0 || static_cast<size_t>(n) >= sizeof(path)) return false;
+    auto file = std::unique_ptr<FIL>(new (std::nothrow) FIL{});
+    if (!file || f_open(file.get(), path, FA_READ) != FR_OK) {
+      ESP_LOGW("atilla_storage", "MANIFEST missing (read-only, no writes)");
+      return false;
+    }
+    const FSIZE_t length = f_size(file.get());
+    const bool valid_size = length > 0 && length <= 16384U;
+    auto text = std::unique_ptr<char[]>(valid_size ? new (std::nothrow) char[length + 1] : nullptr);
+    bool ok = valid_size && bool(text);
+    UINT got = 0;
+    // Keep FatFs reads bounded; reject short reads, stalled I/O and corrupt data.
+    uint32_t total = 0;
+    const uint32_t started = millis();
+    while (ok && total < length) {
+      if (uint32_t(millis() - started) > 10000U) { ok = false; break; }
+      const UINT amount = static_cast<UINT>((length - total) < 256 ? length - total : 256);
+      if (f_read(file.get(), text.get() + total, amount, &got) != FR_OK ||
+          got != amount) { ok = false; break; }
+      total += got;
+    }
+    const FRESULT closed = f_close(file.get());
+    if (!ok || closed != FR_OK) return false;
+    text[total] = 0;
+    auto doc = std::unique_ptr<manifest::Document>(new (std::nothrow) manifest::Document{});
+    if (!doc || !manifest::Parser(text.get(), total).parse(*doc)) {
+      ESP_LOGW("atilla_storage", "MANIFEST invalid metadata (NO WRITES)");
+      return false;
+    }
+    // Free the manifest buffer before checking asset bytes to preserve heap.
+    text.reset();
+    unsigned pass = 0;
+    for (unsigned i = 0; i < doc->count; ++i) {
+      const bool valid = checksum_manifest_entry_(doc->assets[i]);
+      ESP_LOGI("atilla_storage", "MANIFEST ASSET %s index=%u bytes=%" PRIu32 " NO WRITES",
+               valid ? "PASS" : "FAIL", i, doc->assets[i].bytes);
+      if (!valid) return false;
+      ++pass;
+    }
+    ESP_LOGI("atilla_storage", "MANIFEST READ-ONLY PASS assets=%u NO WRITES", pass);
+    return true;
+  }
+
   // Reusable read-only asset checksum primitive. This never transfers asset data
   // to the display and never enables filesystem writes.
   struct AssetDigest {
