@@ -12,6 +12,6 @@ The user's 1.5.2 logs prove FAT32 geometry and real Open-Meteo forecast retrieva
 ## Status
 
 Two downloadable artifacts created in the associated conversation:
-`atilla-mini-neo-1.5.3-asset-vault-preview-private.yaml` (not for public upload), and `atilla-mini-neo-1.5.3-asset-vault-preview-public.yaml` (!secret references). Structural YAML checks passed. This repository commit contains **documentation only**, not the full firmware source.
+`atilla-mini-neo-1.5.3-asset-vault-preview-private.yaml` (not for public upload), and `atilla-mini-neo-1.5.3-asset-vault-preview-public.yaml` (!secret references). Structural YAML checks passed. The credential-free full 1.5.3 source is now committed to `experimental/atilla-mini/atilla-mini-1.5.3-asset-vault-preview.yaml`. The known-working 1.5.2 public source is separately checkpointed at `experimental/atilla-mini/atilla-mini-1.5.2-hardware-pass.yaml`. Both use `!secret` references. Private configured files remain downloadable from chat only.
 
 **Untested:** ESPHome full compile, SD first-root-sector read, higher SPI display clock, memory/use under HTTPS. ESPHome HTTP requests run on the main loop, so their several-second stall is **not fixed** by the display changes. Keep working 1.5.2 as rollback. No writes, formatting, or files created on Samsung 64GB card. Waveshare 7-inch project untouched.
