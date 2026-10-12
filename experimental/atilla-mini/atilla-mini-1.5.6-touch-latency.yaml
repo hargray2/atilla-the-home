@@ -1,0 +1,1019 @@
+# ATILLA Mini NEO 1.5.6 — credential-free firmware
+# ESP32-2432S028 dual USB; confirmed working display/touch pinout.
+# Credential-free development copy; fill !secret values locally.
+substitutions:
+  device_name: atilla-mini
+  friendly_name: ATILLA Mini
+  weather_entity: weather.forecast_home
+
+esphome:
+  includes:
+    - <esp_http_client.h>
+    - <esp_crt_bundle.h>
+    - <freertos/FreeRTOS.h>
+    - <freertos/queue.h>
+    - <freertos/task.h>
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Leave the SD card deselected during boot.
+          id(mini_sd_cs).turn_on();
+          // One-slot queue transfers the HTTPS worker's completed response
+          // to the ESPHome loop; network/TLS code NEVER runs in touch callbacks.
+          id(wx_result_queue) = xQueueCreate(1, sizeof(void *));
+          if (!id(wx_result_queue))
+            ESP_LOGE("mini_weather", "Could not allocate weather result queue");
+      - delay: 7s
+      - script.execute: mini_probe_sd
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "ATILLA Mini NEO 1.5.6 Asset Vault / functional Home refresh and real status"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    advanced:
+      minimum_chip_revision: "3.1"
+      sram1_as_iram: true
+      include_builtin_idf_components:
+        - esp_http_client
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret atilla_mini_api_key
+
+# Mirrors the working 0.1.0 config (no OTA password).
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "ATILLA-Mini-Recovery"
+    password: !secret atilla_mini_fallback_password
+
+captive_portal:
+
+# Keep ESPHome's http_request component as the verified-CA TLS configuration
+# provider. No synchronous `http_request.get` action remains; the actual
+# network transaction runs in an isolated FreeRTOS task below.
+http_request:
+  id: weather_http
+  timeout: 12s
+  verify_ssl: true
+  useragent: ATILLA-Mini/1.5.6
+
+script:
+  - id: fetch_real_weather
+    mode: single
+    then:
+      - lambda: |-
+          // Launch only. No blocking HTTPS on ESPHome's main loop.
+          if (id(wx_fetch_busy) || !id(wx_result_queue)) return;
+          if (!wifi::global_wifi_component->is_connected() ||
+              !id(ha_time).now().is_valid() ||
+              !id(home_latitude).has_state() || !id(home_longitude).has_state())
+            return;
+          struct Job { QueueHandle_t queue; char url[512]; };
+          auto *job = static_cast<Job *>(malloc(sizeof(Job)));
+          if (!job) { ESP_LOGW("mini_weather", "No heap for HTTPS job"); return; }
+          job->queue=id(wx_result_queue);
+          snprintf(job->url,sizeof(job->url),
+            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+            "&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
+            "&daily=temperature_2m_max,temperature_2m_min,weather_code"
+            "&temperature_unit=fahrenheit&wind_speed_unit=mph"
+            "&timezone=auto&forecast_days=3",
+            id(home_latitude).state,id(home_longitude).state);
+          id(wx_fetch_busy)=true;
+          BaseType_t started=xTaskCreatePinnedToCore([](void *opaque) {
+            auto *j=static_cast<Job *>(opaque);
+            // Packet byte 0 = O on success, E on any error;
+            // bytes 1..4096 contain a NUL-terminated JSON response.
+            char *packet=static_cast<char *>(malloc(4098));
+            if (packet) { packet[0]='E'; packet[1]=0; }
+            if (packet) {
+              struct Body { char *data; size_t used; bool overflow; };
+              Body body{packet+1,0,false};
+              esp_http_client_config_t cfg{};
+              cfg.url=j->url;
+              cfg.timeout_ms=8000;
+              cfg.crt_bundle_attach=esp_crt_bundle_attach; // Verify server TLS certificate
+              cfg.buffer_size=1024;
+              cfg.buffer_size_tx=512;
+              cfg.user_data=&body;
+              cfg.event_handler=[](esp_http_client_event_t *evt) -> esp_err_t {
+                if(evt->event_id==HTTP_EVENT_ON_DATA && evt->data_len>0) {
+                  auto *b=static_cast<Body *>(evt->user_data);
+                  if(!b->overflow) {
+                    if(b->used+static_cast<size_t>(evt->data_len)>=4096) {
+                      b->overflow=true;
+                    } else {
+                      memcpy(b->data+b->used,evt->data,evt->data_len);
+                      b->used+=evt->data_len;
+                      b->data[b->used]=0;
+                    }
+                  }
+                }
+                return ESP_OK;
+              };
+              uint32_t start_ms=millis();
+              auto *client=esp_http_client_init(&cfg);
+              esp_err_t err=ESP_FAIL;
+              int status=-1;
+              if(client) {
+                err=esp_http_client_perform(client);
+                if(err==ESP_OK) status=esp_http_client_get_status_code(client);
+                esp_http_client_cleanup(client);
+              }
+              uint32_t elapsed=millis()-start_ms;
+              if(err==ESP_OK && status==200 && body.used>0 && !body.overflow)
+                packet[0]='O';
+              ESP_LOGI("mini_weather","Async HTTPS %lu ms status=%d result=%s",
+                (unsigned long)elapsed,status,packet[0]=='O'?"OK":"FAILED");
+            } else {
+              ESP_LOGW("mini_weather","Could not allocate response buffer");
+            }
+            void *message=packet;
+            if(xQueueSend(j->queue,&message,pdMS_TO_TICKS(100))!=pdTRUE)
+              free(packet);
+            free(j);
+            vTaskDelete(nullptr);
+          },"mini_wx_https",10240,job,1,nullptr,0);
+          if(started!=pdPASS) {
+            id(wx_fetch_busy)=false;
+            free(job);
+            ESP_LOGW("mini_weather","Could not start HTTPS worker task");
+          }
+
+  - id: mini_probe_sd
+    mode: single
+    then:
+      - lambda: |-
+          // READ-ONLY: SD commands CMD0/8/55/41/58/17. No CMD24, mount, or writes.
+          // With the hardware display and touch buses occupied, SD uses software SPI.
+          id(mini_sd_state) = 1;  // probing
+          id(mini_sd_fat32) = false;
+          id(mini_sd_mb) = 0;
+          id(mini_sd_root_count) = -1;
+          id(mini_sd_first_entry) = "--";
+          id(mini_sd_known_status) = 0;  // untested
+          id(mini_sd_known_crc) = 0;
+          auto *dev = id(mini_sd_wire);
+          // spi_device IDs resolve to pointers; open the SPI transaction once.
+          dev->enable();
+          auto io = [&](uint8_t value) -> uint8_t { return dev->transfer_byte(value); };
+          // ESPHome GPIO output: turn_on => electrical HIGH (CS deasserted).
+          auto high = [&]() { id(mini_sd_cs).turn_on(); io(0xFF); };
+          auto low = [&]() { id(mini_sd_cs).turn_off(); io(0xFF); };
+          auto command = [&](uint8_t cmd, uint32_t arg, uint8_t crc) -> uint8_t {
+            high(); low();
+            io(0x40 | cmd);
+            io((arg >> 24) & 0xFF); io((arg >> 16) & 0xFF);
+            io((arg >> 8) & 0xFF); io(arg & 0xFF); io(crc);
+            for (int k=0;k<12;k++) {
+              uint8_t r=io(0xFF);
+              if (!(r & 0x80)) return r;
+            }
+            return 0xFF;
+          };
+          // Entire probe is bounded. Read at most 5 x 512-byte sectors (MBR, VBR, root, subdir, file).
+          high();
+          for(int k=0;k<12;k++) io(0xFF);
+          uint8_t r=0xFF;
+          for(int attempt=0;attempt<4;attempt++) {
+            r=command(0,0,0x95); high();
+            if(r==0x01) break;
+          }
+          if(r != 0x01) {
+            id(mini_sd_state)=2; ESP_LOGW("mini_sd","No SD idle response (CMD0=%02X)",r);
+          } else {
+            r=command(8,0x1AA,0x87);
+            bool v2=(r==0x01);
+            if(v2) {
+              uint8_t echo[4]; for(auto &b:echo)b=io(0xFF);
+              v2=(echo[2]==0x01 && echo[3]==0xAA);
+            }
+            high();
+            if (!v2) {
+              id(mini_sd_state)=3; ESP_LOGW("mini_sd","Card CMD8 unsupported/invalid; probe stopped safely");
+            } else {
+              bool initialized=false;
+              for(int attempt=0;attempt<125;attempt++) {
+                r=command(55,0,0x01); high();
+                if(r>1) break;
+                r=command(41,0x40000000,0x01); high();
+                if(r==0) { initialized=true; break; }
+                delay(2);
+              }
+              if(!initialized) {
+                id(mini_sd_state)=4; ESP_LOGW("mini_sd","Card did not leave idle state");
+              } else {
+                r=command(58,0,0x01);
+                uint32_t ocr=0;
+                for(int k=0;k<4;k++) ocr=(ocr<<8)|io(0xFF);
+                high();
+                bool block_addr=(r==0 && (ocr & 0x40000000U));
+                if(!block_addr) {
+                  id(mini_sd_state)=5; ESP_LOGW("mini_sd","Card is not block-addressed SDHC/SDXC");
+                } else {
+                  std::array<uint8_t,512> buf{};
+                  auto read_sector = [&](uint32_t lba) -> bool {
+                    uint8_t result=command(17,lba,0x01);
+                    if(result!=0) { high(); return false; }
+                    uint8_t token=0xFF;
+                    for(int n=0;n<2000;n++) {
+                      token=io(0xFF);
+                      if(token!=0xFF) break;
+                    }
+                    if(token!=0xFE) { high(); return false; }
+                    for(auto &b:buf)b=io(0xFF);
+                    io(0xFF);io(0xFF); // discard CRC16
+                    high();return true;
+                  };
+                  if(!read_sector(0)) {
+                    id(mini_sd_state)=6;ESP_LOGW("mini_sd","CMD17 sector 0 failed");
+                  } else {
+                    uint32_t boot_lba=0;
+                    auto rd32 = [&](int at) -> uint32_t {
+                      return (uint32_t)buf[at]|((uint32_t)buf[at+1]<<8)|
+                        ((uint32_t)buf[at+2]<<16)|((uint32_t)buf[at+3]<<24);
+                    };
+                    if(buf[510]!=0x55 || buf[511]!=0xAA) {
+                      id(mini_sd_state)=7;ESP_LOGW("mini_sd","Missing MBR/boot signature");
+                    } else {
+                      // MBR: FAT32 0x0B/0x0C, fallback superfloppy at sector 0.
+                      uint8_t part=buf[450];
+                      if(part==0x0B || part==0x0C) boot_lba=rd32(454);
+                      if(boot_lba && !read_sector(boot_lba)) {
+                        id(mini_sd_state)=8;ESP_LOGW("mini_sd","FAT boot sector not readable");
+                      } else {
+                        uint16_t bps=(uint16_t)buf[11]|((uint16_t)buf[12]<<8);
+                        uint8_t spc=buf[13];
+                        uint16_t root=(uint16_t)buf[17]|((uint16_t)buf[18]<<8);
+                        uint16_t fatsz16=(uint16_t)buf[22]|((uint16_t)buf[23]<<8);
+                        uint32_t fatsz32=rd32(36);
+                        uint32_t total=rd32(32);
+                        if(total==0)total=(uint16_t)buf[19]|((uint16_t)buf[20]<<8);
+                        bool fat32=(bps==512 && spc!=0 && (spc & (spc-1))==0 &&
+                          root==0 && fatsz16==0 && fatsz32!=0 &&
+                          buf[510]==0x55 && buf[511]==0xAA);
+                        id(mini_sd_fat32)=fat32;
+                        id(mini_sd_mb)=total/2048;
+                        id(mini_sd_state)=fat32?9:10;
+                        ESP_LOGI("mini_sd","SD probe: %s, partition LBA=%lu, volume=%lu MiB, sectors/cluster=%u",
+                          fat32?"FAT32 READ-ONLY PASS":"FAT32 NOT VERIFIED",
+                          (unsigned long)boot_lba,(unsigned long)id(mini_sd_mb),spc);
+                        // Optional read-only peek into the FIRST FAT32 root-directory sector.
+                        // This is not a FATFS mount or a complete directory traversal.
+                        if(fat32) {
+                          uint16_t reserved=(uint16_t)buf[14]|((uint16_t)buf[15]<<8);
+                          uint8_t fats=buf[16];
+                          uint32_t root_cluster=rd32(44);
+                          uint64_t data_start=(uint64_t)boot_lba+reserved+(uint64_t)fats*fatsz32;
+                          uint64_t root_sector=data_start+(uint64_t)(root_cluster>=2?root_cluster-2:0)*spc;
+                          uint64_t volume_end=(uint64_t)boot_lba+total;
+                          if(reserved>=1 && fats>=1 && root_cluster>=2 && root_sector>=data_start &&
+                              root_sector<volume_end && root_sector<=0xFFFFFFFFULL &&
+                              read_sector((uint32_t)root_sector)) {
+                            int found=0;
+                            std::string first="--";
+                            uint32_t known_dir_cluster=0;
+                            // Parse only one known, bounded directory chain. No FAT mount or writes.
+                            auto entry_cluster = [&](int at)->uint32_t {
+                              uint32_t hi=((uint32_t)buf[at+20])|((uint32_t)buf[at+21]<<8);
+                              uint32_t lo=((uint32_t)buf[at+26])|((uint32_t)buf[at+27]<<8);
+                              return (hi<<16)|lo;
+                            };
+                            auto name_is = [&](int at,const char *eleven)->bool {
+                              for(int n=0;n<11;n++) if(buf[at+n]!=(uint8_t)eleven[n]) return false;
+                              return true;
+                            };
+                            for(int at=0;at<512;at+=32) {
+                              uint8_t first_byte=buf[at];
+                              uint8_t attr=buf[at+11];
+                              if(first_byte==0x00) break;
+                              if(first_byte==0xE5 || attr==0x0F || (attr&0x08)) continue;
+                              found++;
+                              if(found==1) {
+                                std::string name;
+                                for(int c=0;c<8;c++) if(buf[at+c]!=' ') name.push_back((char)buf[at+c]);
+                                if(buf[at+8]!=' ') {
+                                  name.push_back('.');
+                                  for(int c=8;c<11;c++) if(buf[at+c]!=' ') name.push_back((char)buf[at+c]);
+                                }
+                                first=name.empty()?"--":name;
+                              }
+                              if((attr&0x10) && name_is(at,"SYSTEM~1   "))
+                                known_dir_cluster=entry_cluster(at);
+                            }
+                            id(mini_sd_root_count)=found;
+                            id(mini_sd_first_entry)=first;
+                            ESP_LOGI("mini_sd","ROOT FIRST SECTOR READ OK: %d entries, first=%s",
+                              found,first.c_str());
+
+                            // Verify the unchanged reference file that ATILLA 7-inch read on
+                            // this card. Only one directory sector and one data sector; never
+                            // follow untrusted cluster chains or modify any SD sector.
+                            const uint64_t overhead=(uint64_t)reserved+(uint64_t)fats*fatsz32;
+                            const uint64_t data_sectors=(uint64_t)total>overhead ? (uint64_t)total-overhead : 0;
+                            const uint64_t available_clusters=data_sectors/spc;
+                            auto safe_cluster_sector = [&](uint32_t cluster)->uint64_t {
+                              if(cluster<2 || (uint64_t)(cluster-2)>=available_clusters)
+                                return 0;
+                              uint64_t lba=data_start+(uint64_t)(cluster-2)*spc;
+                              if(lba<data_start || lba>=volume_end || lba>0xFFFFFFFFULL)
+                                return 0;
+                              return lba;
+                            };
+                            id(mini_sd_known_status)=3;  // reference file unavailable
+                            uint64_t subdir_sector=safe_cluster_sector(known_dir_cluster);
+                            if(subdir_sector && read_sector((uint32_t)subdir_sector)) {
+                              uint32_t file_cluster=0;
+                              uint32_t file_size=0;
+                              for(int at=0;at<512;at+=32) {
+                                uint8_t mark=buf[at],attr=buf[at+11];
+                                if(mark==0x00) break;
+                                if(mark==0xE5 || attr==0x0F || (attr&0x18)) continue;
+                                if(name_is(at,"WPSETT~1DAT")) {
+                                  file_cluster=entry_cluster(at);
+                                  file_size=rd32(at+28);
+                                  break;
+                                }
+                              }
+                              uint64_t file_sector=safe_cluster_sector(file_cluster);
+                              if(file_sector && file_size==12 && read_sector((uint32_t)file_sector)) {
+                                uint32_t crc=0xFFFFFFFFUL;
+                                for(uint32_t i=0;i<file_size;i++) {
+                                  crc^=buf[i];
+                                  for(int bit=0;bit<8;bit++)
+                                    crc=(crc>>1)^((crc&1U)?0xEDB88320UL:0UL);
+                                }
+                                crc=~crc;
+                                id(mini_sd_known_crc)=crc;
+                                id(mini_sd_known_status)=(crc==0x630105D1UL)?1:2;
+                                ESP_LOGI("mini_sd","KNOWN FILE CONTENT: SYSTEM~1/WPSETT~1.DAT "
+                                  "bytes=%lu CRC32=%08lX reference=%08lX %s",
+                                  (unsigned long)file_size,(unsigned long)crc,
+                                  (unsigned long)0x630105D1UL,
+                                  id(mini_sd_known_status)==1?"MATCH":"CHANGED");
+                              } else {
+                                ESP_LOGI("mini_sd","Reference file absent, different size, "
+                                  "or unreadable; FAT32 read-only probe remains valid");
+                              }
+                            } else {
+                              ESP_LOGI("mini_sd","Reference subdirectory not in first root sector "
+                                "or unreadable; FAT32 read-only probe remains valid");
+                            }
+                          } else {
+                            ESP_LOGW("mini_sd","FAT32 verified; root-sector preview unavailable");
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          high();
+          dev->disable();
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+sensor:
+  - platform: adc
+    id: mini_ambient_light
+    name: "Mini Ambient Light Voltage"
+    pin: GPIO34
+    attenuation: auto
+    update_interval: 15s
+    accuracy_decimals: 2
+  - platform: wifi_signal
+    name: "Mini WiFi Signal"
+    id: mini_wifi_rssi
+    update_interval: 30s
+  - platform: uptime
+    name: "Mini Uptime"
+    id: mini_uptime
+
+  # Automatically receives the home-zone coordinates from Home Assistant.
+  - platform: homeassistant
+    id: home_latitude
+    entity_id: zone.home
+    attribute: latitude
+    internal: true
+  - platform: homeassistant
+    id: home_longitude
+    entity_id: zone.home
+    attribute: longitude
+    internal: true
+
+button:
+  - platform: template
+    name: "Mini Next Page"
+    on_press:
+      - lambda: |-
+          id(mini_page) = (id(mini_page) + 1) % 8;
+          id(mini_bank) = id(mini_page) / 4;
+  - platform: template
+    name: "Mini Brightness Step"
+    on_press:
+      - lambda: |-
+          int v = id(mini_dim_level);
+          id(mini_dim_level) = v == 100 ? 70 : (v == 70 ? 40 : (v == 40 ? 15 : 100));
+          auto c = id(mini_backlight).turn_on();
+          c.set_brightness(id(mini_dim_level) / 100.0f);
+          c.perform();
+
+binary_sensor:
+  - platform: status
+    name: "Mini API Status"
+
+output:
+  - platform: gpio
+    id: mini_sd_cs
+    pin:
+      number: GPIO5
+      ignore_strapping_warning: true
+  - platform: ledc
+    id: mini_backlight_pwm
+    pin: GPIO21
+    frequency: 1000 Hz
+
+light:
+  - platform: monochromatic
+    id: mini_backlight
+    name: "Mini Backlight"
+    output: mini_backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+spi:
+  - id: lcd_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+  - id: touch_spi
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+  # CYD SD slot has its own pins; ESP32's two hardware SPI hosts are in use.
+  # A deliberately slow software bus is appropriate for a first read-only probe.
+  - id: sd_spi
+    clk_pin: GPIO18
+    mosi_pin: GPIO23
+    miso_pin: GPIO19
+    interface: software
+
+spi_device:
+  - id: mini_sd_wire
+    spi_id: sd_spi
+    spi_mode: mode0
+    data_rate: 200kHz
+
+
+
+font:
+  - file: "gfonts://Roboto"
+    id: mini_font
+    size: 20
+  - file: "gfonts://Roboto"
+    id: mini_big
+    size: 48
+  - file: "gfonts://Roboto"
+    id: mini_small
+    size: 14
+  - file: "gfonts://Roboto"
+    id: mini_tiny
+    size: 12
+
+display:
+  - platform: mipi_spi
+    id: mini_display
+    model: ST7789V
+    spi_id: lcd_spi
+    cs_pin:
+      number: GPIO15
+      ignore_strapping_warning: true
+    dc_pin:
+      number: GPIO2
+      ignore_strapping_warning: true
+    invert_colors: false
+    dimensions:
+      width: 240
+      height: 320
+    rotation: 90
+    # Two half-screen passes rather than four quarter-screen passes.
+    # Costs ~19.2 KiB more internal RAM; keep 1.5.5 as fallback.
+    buffer_size: 50%
+    color_depth: 8
+    # Redraw when state changes, on a short scheduler interval; not on touch.
+    update_interval: never
+    # Hardware-tested 20MHz on 1.5.3; revert to 10MHz if visual artifacts appear.
+    data_rate: 20MHz
+    auto_clear_enabled: false  # Lambda always paints full screen; skip redundant clear.
+    lambda: |-
+      const Color bg(5,9,21), panel(14,25,44), line(30,57,73);
+      const Color cyan(17,224,216), white(238,247,255), dim(128,153,179);
+      const Color pink(250,81,154), amber(255,194,83), mint(97,236,170);
+      int page=id(mini_page);
+      // All accents follow the local palette selector; no HA actions required.
+      const Color accent = id(mini_theme)==0 ? cyan : (id(mini_theme)==1 ? pink : (id(mini_theme)==2 ? amber : mint));
+      it.fill(bg);
+      it.filled_rectangle(0,0,320,3,accent);
+      it.print(12,8,id(mini_small),accent,"ATILLA  //  MINI");
+      it.print(273,10,id(mini_tiny),dim,"1.5.6");
+      // Tiny live connectivity lamp, independent of the theme.
+      it.filled_circle(260,17,3,id(mini_wifi_rssi).has_state()?mint:pink);
+      it.line(12,32,308,32,line);
+      if(page==0) {
+        // Reclaim top row for the clock; no redundant status heading.
+        if(id(ha_time).now().is_valid()) {
+          it.strftime(11,40,id(mini_big),white,"%I:%M",id(ha_time).now());
+          it.strftime(243,75,id(mini_small),accent,"%p",id(ha_time).now());
+          it.strftime(13,100,id(mini_small),dim,"%a, %b %d",id(ha_time).now());
+        } else it.print(12,59,id(mini_font),pink,"TIME SYNC...");
+        // Useful weather freshness indicator, no simulated or repeating animation.
+        if(id(wx_fetch_busy)) {
+          it.print(13,119,id(mini_tiny),amber,"WX SYNCING...");
+        } else if(id(wx_ready)) {
+          uint32_t age_min=(millis()-id(wx_last_update))/60000;
+          it.printf(13,119,id(mini_tiny),age_min>=120?amber:accent,"WX UPDATED %lum AGO",(unsigned long)age_min);
+        } else {
+          it.print(13,119,id(mini_tiny),pink,"WX NOT READY");
+        }
+        if(id(mini_sd_state)==9) it.print(256,119,id(mini_tiny),mint,"SD OK");
+        it.filled_rectangle(12,137,143,56,panel);
+        it.filled_rectangle(165,137,143,56,panel);
+        it.print(21,143,id(mini_tiny),dim,"OUTDOOR TEMP");
+        if(id(wx_ready)) it.printf(21,161,id(mini_font),white,"%.1f F",id(wx_temp));
+        else it.print(21,161,id(mini_font),pink,"--");
+        it.print(173,143,id(mini_tiny),dim,"HUMIDITY");
+        if(id(wx_ready)) it.printf(173,161,id(mini_font),accent,"%.0f%%",id(wx_humidity));
+        else it.print(173,161,id(mini_font),pink,"--");
+      } else if(page==1) {
+        it.print(12,39,id(mini_font),white,"WEATHER / LIVE");
+        it.filled_rectangle(12,70,296,55,panel);
+        if(id(wx_ready)) {
+          it.printf(19,77,id(mini_font),white,"%.1f F",id(wx_temp));
+          it.printf(166,77,id(mini_small),accent,"RH %.0f%%",id(wx_humidity));
+          it.printf(166,99,id(mini_small),amber,"W %.0f mph",id(wx_wind));
+        } else {
+          it.print(19,82,id(mini_small),dim,"Waiting for live forecast...");
+        }
+        it.print(12,130,id(mini_tiny),dim,"OPEN-METEO / 3 DAYS / F");
+        const char* names[3]={"TODAY","TMRW","DAY 3"};
+        for(int k=0;k<3;k++){
+          int x=12+k*101;
+          it.filled_rectangle(x,149,95,45,panel);
+          it.print(x+7,151,id(mini_tiny),accent,names[k]);
+          if(id(wx_ready)) {
+            it.printf(x+6,172,id(mini_small),white,"%.0f/%.0f",id(wx_high)[k],id(wx_low)[k]);
+          } else it.print(x+7,173,id(mini_tiny),dim,"-- / --");
+        }
+      } else if(page==2) {
+        it.print(12,41,id(mini_font),white,"SIM / ROOM");
+        it.filled_rectangle(12,82,144,111,panel);it.filled_rectangle(164,82,144,111,panel);
+        it.print(23,91,id(mini_small),dim,"LIGHT ARRAY");
+        it.print(23,121,id(mini_font),id(sim_lights)?mint:pink,id(sim_lights)?"ON":"OFF");
+        it.print(174,91,id(mini_small),dim,"SECURITY");
+        it.print(174,121,id(mini_font),id(sim_alarm)?pink:mint,id(sim_alarm)?"ARMED":"READY");
+        it.print(22,175,id(mini_tiny),cyan,"TAP TO TOGGLE");
+      } else if(page==3) {
+        it.print(12,41,id(mini_font),white,"BLITZ / ARCADE");
+        it.printf(13,72,id(mini_small),cyan,"SCORE %d  BEST %d",id(mini_score),id(mini_best_score));
+        if(id(mini_game_active)) {
+          it.printf(12,94,id(mini_small),amber,"TIME %d",id(mini_game_remaining));
+          it.filled_circle(id(mini_target_x),id(mini_target_y),19,amber);
+          it.circle(id(mini_target_x),id(mini_target_y),24,cyan);
+          it.filled_circle(id(mini_target_x),id(mini_target_y),7,pink);
+        } else {it.print(21,127,id(mini_font),amber,"TAP TO START");it.print(21,160,id(mini_tiny),dim,"30 second target challenge");}
+      } else if(page==4) {
+        it.print(12,41,id(mini_font),white,"SYSTEM / LIVE");
+        it.filled_rectangle(12,78,296,116,panel);
+        if(id(mini_wifi_rssi).has_state())it.printf(22,83,id(mini_small),cyan,"WIFI %.0f dBm",id(mini_wifi_rssi).state);
+        it.printf(22,106,id(mini_small),mint,"HEAP %lu bytes",(unsigned long)esp_get_free_heap_size());
+        if(id(mini_ambient_light).has_state())it.printf(22,129,id(mini_small),amber,"LIGHT %.2f V",id(mini_ambient_light).state);
+        const char* sdtext=id(mini_sd_state)==0?"SD: QUEUED":
+          id(mini_sd_state)==1?"SD: PROBING":
+          id(mini_sd_state)==9?"SD: FAT32 READ OK":"SD: NOT READY";
+        it.print(22,152,id(mini_tiny),id(mini_sd_state)==9?mint:amber,sdtext);
+        if(id(mini_sd_state)==9) it.printf(202,152,id(mini_tiny),mint,"%lu MiB",(unsigned long)id(mini_sd_mb));
+        if(id(mini_sd_root_count)>=0)
+          it.printf(22,166,id(mini_tiny),dim,"ROOT S0: %d  FIRST: %s",
+                    id(mini_sd_root_count),id(mini_sd_first_entry).c_str());
+        if(id(mini_sd_known_status)==1)
+          it.print(22,181,id(mini_tiny),mint,"12-BYTE FILE CRC32 MATCH");
+        else if(id(mini_sd_known_status)==2)
+          it.print(22,181,id(mini_tiny),amber,"REFERENCE FILE CRC CHANGED");
+        else if(id(mini_sd_known_status)==3)
+          it.print(22,181,id(mini_tiny),dim,"REFERENCE FILE UNAVAILABLE");
+      } else if(page==5) {
+        it.print(12,40,id(mini_font),white,"HEAP / SCOPE");
+        it.printf(12,68,id(mini_small),accent,"FREE %lu B",(unsigned long)esp_get_free_heap_size());
+        it.print(233,69,id(mini_tiny),dim,"120 SEC");
+        it.filled_rectangle(12,91,296,102,panel);
+        for(int j=0;j<5;j++) it.line(16,96+j*23,304,96+j*23,line);
+        int minimum=2147483647,maximum=0;
+        for(int j=0;j<60;j++) {
+          int v=id(mini_heap_history)[j];
+          if(v>0){minimum=std::min(minimum,v);maximum=std::max(maximum,v);}
+        }
+        if(minimum<=maximum) {
+          int range=std::max(2048,maximum-minimum);
+          for(int j=1;j<60;j++) {
+            int a=id(mini_heap_history)[j-1],b=id(mini_heap_history)[j];
+            if(a>0 && b>0) {
+              int y1=186-(a-minimum)*86/range;
+              int y2=186-(b-minimum)*86/range;
+              y1=std::max(97,std::min(188,y1));
+              y2=std::max(97,std::min(188,y2));
+              it.line(17+(j-1)*4, y1, 17+j*4, y2,accent);
+            }
+          }
+        }
+            } else if(page==6) {
+        it.print(12,41,id(mini_font),white,"HYPERSPACE / FX");
+        it.printf(263,48,id(mini_tiny),amber,"x%d",id(mini_warp));
+        it.filled_rectangle(12,76,296,118,panel);
+        for(int k=0;k<38;k++){
+          int d=(k*41+(millis()/55)*id(mini_warp))%225;
+          int ox=(k*97)%301-150,oy=(k*53)%141-70;
+          int x=160+ox*d/225,y=134+oy*d/225,len=1+d/55;
+          it.line(x,y,x+(ox>0?len:-len),y+(oy>0?len:-len),k%5?cyan:pink);
+        }
+        it.print(15,179,id(mini_tiny),dim,"TAP TO CHANGE WARP SPEED");
+      } else {
+        it.print(12,41,id(mini_font),white,"CONTROL CORE");
+        it.filled_rectangle(12,83,296,110,panel);
+        it.printf(22,96,id(mini_font),accent,"BRIGHTNESS %d%%",id(mini_dim_level));
+        it.filled_rectangle(22,138,274,15,dim);
+        it.filled_rectangle(22,138,274*id(mini_dim_level)/100,15,accent);
+        it.print(22,158,id(mini_tiny),white,"TAP BAR: CHANGE BRIGHTNESS");
+        const char* palettes[4]={"CYAN","PINK","GOLD","MINT"};
+        it.printf(22,177,id(mini_tiny),accent,"THEME: %s  (TAP LOWER CARD)",palettes[id(mini_theme)]);
+      }
+      // Four large pill buttons. Outer capsule acts as a border; inner capsule is fill.
+      it.filled_rectangle(0,198,320,42,Color(7,13,26));
+      const char* bank0[4]={"HOME","WX","ROOM","GAME"};
+      // On Home the first pill is a weather refresh action, not a dead HOME link.
+      const char* bank1[4]={"SYS","SCOPE","FX","CTRL"};
+      for(int k=0;k<4;k++) {
+        int x=4+k*80, y=205, w=72, h=30, r=15;
+        bool selected=(page==id(mini_bank)*4+k);
+        Color outline=selected?accent:Color(59,90,112);
+        Color fill=selected?Color(16,69,80):Color(15,28,47);
+        // Capsule built only from standard ESPHome display primitives.
+        it.filled_rectangle(x+r,y,w-2*r,h,outline);
+        it.filled_circle(x+r,y+r,r,outline);
+        it.filled_circle(x+w-r-1,y+r,r,outline);
+        it.filled_rectangle(x+r,y+2,w-2*r,h-4,fill);
+        it.filled_circle(x+r,y+r,r-2,fill);
+        it.filled_circle(x+w-r-1,y+r,r-2,fill);
+        // The anchor is the *true horizontal center* of each 72px capsule.
+        const char* label = id(mini_bank)==0 ? ((page==0 && k==0)?"SYNC":bank0[k]) : bank1[k];
+        it.print(x+w/2,y+7,id(mini_small),selected?white:dim,TextAlign::TOP_CENTER,label);
+      }
+      // Page-bank indicator; removed decorative repeating heartbeat bar.
+      it.filled_circle(277,46,3,id(mini_bank)==0?accent:dim);
+      it.filled_circle(291,46,3,id(mini_bank)==1?accent:dim);
+
+globals:
+  - id: wx_result_queue
+    type: QueueHandle_t
+    initial_value: "nullptr"
+  - id: wx_fetch_busy
+    type: bool
+    initial_value: "false"
+  - id: mini_touch_up_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: mini_touch_awaiting_draw
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: mini_touch_down
+    type: bool
+    initial_value: "false"
+  - id: mini_ui_dirty
+    type: bool
+    initial_value: "true"
+  - id: mini_last_draw_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: mini_sd_state
+    type: int
+    initial_value: "0"
+  - id: mini_sd_known_status
+    type: int
+    initial_value: "0"  # 0 untested, 1 reference matched, 2 mismatch, 3 unavailable
+  - id: mini_sd_known_crc
+    type: uint32_t
+    initial_value: "0"
+  - id: mini_sd_root_count
+    type: int
+    initial_value: "-1"
+  - id: mini_sd_first_entry
+    type: std::string
+    initial_value: '"--"' 
+  - id: mini_sd_mb
+    type: uint32_t
+    initial_value: "0"
+  - id: mini_sd_fat32
+    type: bool
+    initial_value: "false"
+  - id: wx_ready
+    type: bool
+    initial_value: "false"
+  - id: wx_last_update
+    type: uint32_t
+    initial_value: "0"
+  - id: wx_temp
+    type: float
+    initial_value: "NAN"
+  - id: wx_humidity
+    type: float
+    initial_value: "NAN"
+  - id: wx_wind
+    type: float
+    initial_value: "NAN"
+  - id: wx_high
+    type: std::array<float, 3>
+    initial_value: "{NAN, NAN, NAN}"
+  - id: wx_low
+    type: std::array<float, 3>
+    initial_value: "{NAN, NAN, NAN}"
+  - id: wx_code
+    type: std::array<int, 3>
+    initial_value: "{-1, -1, -1}"
+  - id: mini_theme
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: mini_bank
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: touch_start_x
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: touch_start_y
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: touch_last_x
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: mini_heap_history
+    type: std::array<int, 60>
+    restore_value: no
+    initial_value: 'std::array<int, 60>{}'
+  - id: mini_warp
+    type: int
+    restore_value: no
+    initial_value: '1'
+  - id: sim_lights
+    type: bool
+    restore_value: no
+    initial_value: "true"
+  - id: sim_alarm
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: sim_scene
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: sim_temp
+    type: float
+    restore_value: no
+    initial_value: "73.5"
+  - id: sim_humidity
+    type: float
+    restore_value: no
+    initial_value: "54.0"
+  - id: mini_dim_level
+    type: int
+    restore_value: no
+    initial_value: "100"
+  - id: mini_score
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: mini_best_score
+    type: int
+    restore_value: yes
+    initial_value: "0"
+  - id: mini_game_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: mini_game_start_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: mini_game_remaining
+    type: int
+    restore_value: no
+    initial_value: "30"
+  - id: mini_misses
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: mini_target_x
+    type: int
+    restore_value: no
+    initial_value: "155"
+  - id: mini_target_y
+    type: int
+    restore_value: no
+    initial_value: "129"
+  - id: mini_page
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+touchscreen:
+  platform: xpt2046
+  id: mini_touch
+  display: mini_display
+  spi_id: touch_spi
+  cs_pin: GPIO33
+  interrupt_pin: GPIO36
+  update_interval: 25ms
+  threshold: 400
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 340
+    y_max: 3860
+  transform:
+    swap_xy: true
+  on_touch:
+    - lambda: |-
+        id(mini_touch_down)=true;
+        id(touch_start_x)=touch.x;
+        id(touch_start_y)=touch.y;
+        id(touch_last_x)=touch.x;
+  on_update:
+    - lambda: |-
+        for(auto t : touches) {
+          if(t.state==2 || t.state==1) id(touch_last_x)=t.x;
+        }
+  on_release:
+    - lambda: |-
+        id(mini_touch_down)=false;
+        id(mini_touch_up_ms)=millis();
+        id(mini_touch_awaiting_draw)=true;
+        int x=id(touch_last_x),y=id(touch_start_y);
+        int dx=x-id(touch_start_x);
+        if(abs(dx)>60) {
+          id(mini_bank)=dx<0?1:0;
+          id(mini_page)=id(mini_bank)*4;
+        } else if(y>=198) {
+          int slot=std::max(0,std::min(3,x/80));
+          if(id(mini_bank)==0 && id(mini_page)==0 && slot==0) {
+            // A useful contextual quick action on Home.
+            if(!id(wx_fetch_busy)) id(fetch_real_weather).execute();
+            ESP_LOGI("mini_nav","Home SYNC pressed: requesting real weather");
+          } else {
+            id(mini_page)=id(mini_bank)*4+slot;
+          }
+        } else if(id(mini_page)==2 && y>=82 && y<193) {
+          if(x<160)id(sim_lights)=!id(sim_lights);
+          else id(sim_alarm)=!id(sim_alarm);
+        } else if(id(mini_page)==3) {
+          if(!id(mini_game_active)){
+            id(mini_game_active)=true;id(mini_game_start_ms)=millis();
+            id(mini_game_remaining)=30;id(mini_score)=0;id(mini_misses)=0;
+            id(mini_target_x)=160;id(mini_target_y)=155;
+          } else {
+            int vx=x-id(mini_target_x),vy=y-id(mini_target_y);
+            if(vx*vx+vy*vy<900){id(mini_score)++;id(mini_target_x)=45+((id(mini_score)*73+millis()/100)%230);id(mini_target_y)=125+((id(mini_score)*37+millis()/150)%56);}else id(mini_misses)++;
+          }
+        } else if(id(mini_page)==4 && y>=78 && y<198) {
+          if(!id(mini_probe_sd).is_running()) id(mini_probe_sd).execute();
+        } else if(id(mini_page)==6)id(mini_warp)=id(mini_warp)%4+1;
+        else if(id(mini_page)==7){
+          if(y>=163 && y<198) {
+            id(mini_theme)=(id(mini_theme)+1)%4;
+          } else {
+          int v=id(mini_dim_level);
+          id(mini_dim_level)=v==100?70:(v==70?40:(v==40?15:100));
+          auto c=id(mini_backlight).turn_on();c.set_brightness(id(mini_dim_level)/100.0f);c.perform();
+          }
+        }
+        id(mini_ui_dirty)=true;
+        ESP_LOGI("mini_nav","page=%d bank=%d x=%d start=%d",id(mini_page),id(mini_bank),x,id(touch_start_x));
+
+interval:
+  # Touch callbacks only change state. This lightweight 100ms scheduler
+  # handles completed HTTPS responses and triggers the next LCD refresh.
+  - interval: 100ms
+    then:
+      - lambda: |-
+          if (id(wx_result_queue)) {
+            void *message=nullptr;
+            if (xQueueReceive(id(wx_result_queue),&message,0)==pdTRUE) {
+              id(wx_fetch_busy)=false;
+              auto *packet=static_cast<char *>(message);
+              if(packet && packet[0]=='O') {
+                bool ok=json::parse_json(std::string(packet+1),[](JsonObject root)->bool {
+                  JsonVariant current=root["current"];
+                  JsonVariant daily=root["daily"];
+                  if(current.isNull() || daily.isNull()) return false;
+                  JsonArray highs=daily["temperature_2m_max"].as<JsonArray>();
+                  JsonArray lows=daily["temperature_2m_min"].as<JsonArray>();
+                  JsonArray codes=daily["weather_code"].as<JsonArray>();
+                  if(highs.size()<3 || lows.size()<3 || codes.size()<3) return false;
+                  if(current["temperature_2m"].isNull() ||
+                     current["relative_humidity_2m"].isNull() ||
+                     current["wind_speed_10m"].isNull()) return false;
+                  for(int k=0;k<3;k++)
+                    if(highs[k].isNull() || lows[k].isNull() || codes[k].isNull())
+                      return false;
+                  id(wx_temp)=current["temperature_2m"].as<float>();
+                  id(wx_humidity)=current["relative_humidity_2m"].as<float>();
+                  id(wx_wind)=current["wind_speed_10m"].as<float>();
+                  for(int k=0;k<3;k++) {
+                    id(wx_high)[k]=highs[k].as<float>();
+                    id(wx_low)[k]=lows[k].as<float>();
+                    id(wx_code)[k]=codes[k].as<int>();
+                  }
+                  id(wx_ready)=true;
+                  id(wx_last_update)=millis();
+                  return true;
+                });
+                if(ok) {
+                  id(mini_ui_dirty)=true;
+                  ESP_LOGI("mini_weather","Open-Meteo real weather and 3-day forecast updated (background)");
+                } else ESP_LOGW("mini_weather","Background forecast JSON invalid");
+              } else ESP_LOGW("mini_weather","Background forecast unavailable; retained last values");
+              free(packet);
+              id(mini_ui_dirty)=true;
+            }
+          }
+          const uint32_t now=millis();
+          const int page=id(mini_page);
+          // No wasted redraws on static pages. Quick event refresh on touch.
+          const uint32_t period=(page==3 && id(mini_game_active)) ? 300 :
+            (page==6 ? 650 : (page==0 ? 5000 : (page==4 ? 5000 : (page==5 ? 2000 : 30000))));
+          if(!id(mini_touch_down) &&
+             ((id(mini_ui_dirty) && now-id(mini_last_draw_ms)>=120) ||
+              now-id(mini_last_draw_ms)>=period)) {
+            id(mini_ui_dirty)=false;
+            id(mini_last_draw_ms)=now;
+            const uint32_t lcd_start=millis();
+            id(mini_display).update();
+            if(id(mini_touch_awaiting_draw)) {
+              const uint32_t lcd_ms=millis()-lcd_start;
+              const uint32_t touch_to_paint_ms=millis()-id(mini_touch_up_ms);
+              id(mini_touch_awaiting_draw)=false;
+              ESP_LOGI("mini_touch_perf",
+                "Touch->LCD complete %lu ms (render %lu ms), heap=%lu B",
+                (unsigned long)touch_to_paint_ms,
+                (unsigned long)lcd_ms,
+                (unsigned long)esp_get_free_heap_size());
+            }
+          }
+  - interval: 250ms
+    then:
+      - lambda: |-
+          if (id(mini_game_active)) {
+            uint32_t elapsed = (millis() - id(mini_game_start_ms)) / 1000;
+            id(mini_game_remaining) = elapsed >= 30 ? 0 : 30 - elapsed;
+            if (elapsed >= 30) {
+              id(mini_game_active) = false;
+              if (id(mini_score) > id(mini_best_score)) {
+                id(mini_best_score) = id(mini_score);
+                ESP_LOGI("atilla_game", "NEW RECORD: %d", id(mini_best_score));
+              }
+            }
+          }
+
+  - interval: 2s
+    then:
+      - lambda: |-
+          for (int i=0;i<59;i++) id(mini_heap_history)[i]=id(mini_heap_history)[i+1];
+          id(mini_heap_history)[59]=(int)esp_get_free_heap_size();
+  - interval: 45min
+    then:
+      - script.execute: fetch_real_weather
+  - interval: 30s
+    then:
+      - if:
+          condition:
+            lambda: return !id(wx_ready);
+          then:
+            - script.execute: fetch_real_weather
