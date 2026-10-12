@@ -34,6 +34,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Native C++ manifest parser tests
         run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_manifest_parser.cpp -o /tmp/atilla-manifest-tests && /tmp/atilla-manifest-tests
+      - name: Native C++ cache transaction safety tests
+        run: g++ -std=c++17 -Wall -Wextra -Werror tests/test_cache_asset_contract.cpp -o /tmp/atilla-cache-tests && /tmp/atilla-cache-tests
       - name: Install pinned ESPHome
         run: python -m pip install "esphome==2026.9.1"
       - name: Validate all four read-only probe modes
@@ -43,5 +45,6 @@ jobs:
           esphome config tests/bounded-crc-smoke.yaml
           esphome config tests/combined-readonly-smoke.yaml
           esphome config tests/manifest-readonly-smoke.yaml
+          esphome config tests/cache-write-pilot-smoke.yaml
       - name: Compile combined storage acceptance (one C++ build)
-        run: esphome compile tests/manifest-readonly-smoke.yaml
+        run: esphome compile tests/cache-write-pilot-smoke.yaml
