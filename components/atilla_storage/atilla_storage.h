@@ -195,6 +195,12 @@ class ReadOnlySD {
 namespace esphome::atilla_storage {
 class AtillaStorage : public Component {
  public:
+  // A private full-panel lambda may render a *copied/decoded* image on the
+  // ESPHome/LVGL main loop. The borrowed compressed PNG is freed on return.
+  using CachePreviewCallback = bool (*)(const uint8_t *, uint32_t, uint16_t, uint16_t);
+  void set_cache_preview_callback(CachePreviewCallback callback) {
+    cache_preview_callback_ = callback;
+  }
   void set_devices(spi_device::SPIDeviceComponent *card, spi_device::SPIDeviceComponent *idle) {
     card_ = card;
     idle_ = idle;
@@ -212,6 +218,7 @@ class AtillaStorage : public Component {
   void set_cache_write_pilot(bool enabled) { cache_write_pilot_ = enabled; }
   void set_https_cache_pilot(bool enabled) { https_cache_pilot_ = enabled; }
   void set_cache_read_pilot(bool enabled) { cache_read_pilot_ = enabled; }
+  void set_cache_screen_pilot(bool enabled) { cache_screen_pilot_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -223,25 +230,42 @@ class AtillaStorage : public Component {
   void loop() override {
     // This is the only consumer of the worker-owned frame pointer. Image bytes
     // are never accessed by LVGL/ESPHome while FatFs has the SD mounted.
-    if (cache_read_pilot_) {
+    if (cache_read_pilot_ || cache_screen_pilot_) {
       std::unique_ptr<experimental::ReadOnlyFatFs::CachedPng> ready(
           cache_png_pending_.exchange(nullptr, std::memory_order_acq_rel));
       if (ready && ready->data) {
         cache_image::Metadata verified{};
         const bool good = cache_image::inspect_verified_png(
             ready->data.get(), ready->meta.bytes, ready->meta.crc32, verified);
-        ESP_LOGI("atilla_storage",
-                 "CACHE MAIN-LOOP HANDOFF %s bytes=%" PRIu32
-                 " dimensions=%ux%u NO WRITES (not displayed)",
-                 good ? "PASS" : "FAIL", ready->meta.bytes,
-                 ready->meta.width, ready->meta.height);
-        // Main-loop ownership expires here. A future LVGL widget must instead
-        // retain its owned decoded image buffer until the widget is destroyed.
+        if (cache_screen_pilot_) {
+          // First preview is deliberately limited to the 70-byte 1x1 blue
+          // pixel already downloaded to slot 2. Never hand arbitrary data
+          // to a decoder/widget from a filesystem worker.
+          const bool pinned = good && ready->meta.bytes == 70U &&
+                              verified.crc32 == 0xF60D2E27U &&
+                              verified.width == 1 && verified.height == 1;
+          const bool displayed = pinned && cache_preview_callback_ != nullptr &&
+              cache_preview_callback_(ready->data.get(), verified.bytes,
+                                      verified.width, verified.height);
+          ESP_LOGI("atilla_storage",
+                   "CACHE SCREEN MAIN-LOOP %s slot=2 bytes=%" PRIu32
+                   " NO WRITES (preview callback=%s)",
+                   displayed ? "PASS" : "FAIL", ready->meta.bytes,
+                   cache_preview_callback_ ? "SET" : "MISSING");
+        } else {
+          ESP_LOGI("atilla_storage",
+                   "CACHE MAIN-LOOP HANDOFF %s bytes=%" PRIu32
+                   " dimensions=%ux%u NO WRITES (not displayed)",
+                   good ? "PASS" : "FAIL", ready->meta.bytes,
+                   ready->meta.width, ready->meta.height);
+        }
+        // Borrowed PNG bytes expire here. The callback MUST retain its own
+        // decoded LVGL pixel buffer for the widget's entire lifetime.
       }
     }
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_ || cache_read_pilot_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_ || cache_read_pilot_ || cache_screen_pilot_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -371,11 +395,12 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (cache_read_pilot_) {
-      const bool ok = fatfs.load_cache_png_readonly(1, 70, 0xF60D2E27U,
+    if (cache_read_pilot_ || cache_screen_pilot_) {
+      const unsigned cache_slot = cache_screen_pilot_ ? 2U : 1U;
+      const bool ok = fatfs.load_cache_png_readonly(cache_slot, 70, 0xF60D2E27U,
                                                     verified_cache_png);
-      ESP_LOGI("atilla_storage", "CACHE PSRAM LOAD OVERALL %s NO WRITES",
-               ok ? "PASS" : "FAIL");
+      ESP_LOGI("atilla_storage", "CACHE PSRAM LOAD OVERALL %s slot=%u NO WRITES",
+               ok ? "PASS" : "FAIL", cache_slot);
     } else if (https_cache_pilot_) {
       const bool ok = fatfs.store_cache_png_once(
           graphics_fetch::kCacheSlot, verified_download.bytes.get(),
@@ -452,7 +477,7 @@ class AtillaStorage : public Component {
       ESP_LOGI("atilla_storage", "FATFS unmounted");
     else
       ESP_LOGE("atilla_storage", "FATFS unmount FAILED; cache handoff blocked");
-    if (cache_image::handoff_ready(cache_read_pilot_, unmount_ok,
+    if (cache_image::handoff_ready(cache_read_pilot_ || cache_screen_pilot_, unmount_ok,
                                    bool(verified_cache_png.data))) {
       // Transfer is explicitly one-way, and publication occurs only AFTER
       // successful f_unmount: no live FATFS handle escapes the worker.
@@ -490,6 +515,8 @@ class AtillaStorage : public Component {
   bool cache_write_pilot_{false};
   bool https_cache_pilot_{false};
   bool cache_read_pilot_{false};
+  bool cache_screen_pilot_{false};
+  CachePreviewCallback cache_preview_callback_{nullptr};
   std::atomic<experimental::ReadOnlyFatFs::CachedPng *> cache_png_pending_{nullptr};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
