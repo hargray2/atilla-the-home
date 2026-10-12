@@ -203,6 +203,7 @@ class AtillaStorage : public Component {
   void set_asset_discovery_probe(bool enabled) { asset_discovery_probe_ = enabled; }
   void set_bounded_crc_probe(bool enabled) { bounded_crc_probe_ = enabled; }
   void set_combined_readonly_probe(bool enabled) { combined_readonly_probe_ = enabled; }
+  void set_manifest_readonly_probe(bool enabled) { manifest_readonly_probe_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -350,6 +351,16 @@ class AtillaStorage : public Component {
     } else if (fatfs_write_roundtrip_test_) {
       const bool ok = fatfs.run_batched_write_roundtrip();
       ESP_LOGI("atilla_storage", "FATFS WRITE ROUNDTRIP %s", ok ? "PASS" : "FAIL");
+    } else if (manifest_readonly_probe_) {
+      const bool inventory_ok = fatfs.run_asset_discovery_read_only();
+      const bool crc_ok = inventory_ok && fatfs.run_bounded_file_crc_probe();
+      const bool asset_ok = crc_ok && fatfs.run_asset_reader_acceptance_readonly();
+      const bool manifest_ok = asset_ok && fatfs.verify_asset_manifest_readonly();
+      ESP_LOGI("atilla_storage",
+               "COMBINED MANIFEST READ-ONLY %s discovery=%s crc=%s asset=%s manifest=%s NO WRITES",
+               manifest_ok ? "PASS" : "FAIL", inventory_ok ? "PASS" : "FAIL",
+               crc_ok ? "PASS" : "FAIL", asset_ok ? "PASS" : "FAIL",
+               manifest_ok ? "PASS" : "FAIL");
     } else if (combined_readonly_probe_) {
       const bool inventory_ok = fatfs.run_asset_discovery_read_only();
       const bool crc_ok = inventory_ok && fatfs.run_bounded_file_crc_probe();
@@ -409,6 +420,7 @@ class AtillaStorage : public Component {
   bool asset_discovery_probe_{false};
   bool bounded_crc_probe_{false};
   bool combined_readonly_probe_{false};
+  bool manifest_readonly_probe_{false};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
