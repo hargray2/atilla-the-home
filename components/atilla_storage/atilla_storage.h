@@ -182,6 +182,7 @@ class ReadOnlySD {
 } // namespace esphome::atilla_storage
 
 #include "fatfs_readonly.h"
+#include "graphics_https_fetch.h"
 // ESPHome codegen integration: one delayed storage probe per boot.
 // Experimental storage-service mode uses a separate FreeRTOS worker stack.
 #include "esphome/core/component.h"
@@ -205,6 +206,7 @@ class AtillaStorage : public Component {
   void set_combined_readonly_probe(bool enabled) { combined_readonly_probe_ = enabled; }
   void set_manifest_readonly_probe(bool enabled) { manifest_readonly_probe_ = enabled; }
   void set_cache_write_pilot(bool enabled) { cache_write_pilot_ = enabled; }
+  void set_https_cache_pilot(bool enabled) { https_cache_pilot_ = enabled; }
   void set_fatfs_write_roundtrip_test(bool enabled) { fatfs_write_roundtrip_test_ = enabled; }
   void set_storage_service_test(bool enabled) { storage_service_test_ = enabled; }
   void set_storage_repeat_test(bool enabled) { storage_repeat_test_ = enabled; }
@@ -216,7 +218,7 @@ class AtillaStorage : public Component {
   void loop() override {
     if (attempted_ || (uint32_t) (millis() - start_ms_) < 30000UL) return;
     attempted_ = true; // never repeat after a failure
-    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_) {
+    if (storage_service_test_ || storage_repeat_test_ || settings_persistence_probe_ || fatfs_batch_read_probe_ || asset_discovery_probe_ || bounded_crc_probe_ || combined_readonly_probe_ || manifest_readonly_probe_ || cache_write_pilot_ || https_cache_pilot_) {
       ESP_LOGI("atilla_storage", "Starting one-shot storage worker with 24576-byte stack");
       const BaseType_t created = xTaskCreatePinnedToCore(
           &AtillaStorage::storage_worker_, "atilla_sd_worker",
@@ -331,7 +333,12 @@ class AtillaStorage : public Component {
     if (fatfs_mount_test_) this->run_fatfs_test_(sd);
   }
   void run_fatfs_test_(ReadOnlySD &sd) {
-    ESP_LOGI("atilla_storage", "Opt-in FATFS read-only mount starting (NO WRITES)");
+    graphics_https::Download verified_download;
+    if (https_cache_pilot_ && !graphics_https::download_public_test_asset(verified_download)) {
+      ESP_LOGW("atilla_storage", "HTTPS CACHE: refusing SD writes because download failed");
+      return;
+    }
+    ESP_LOGI("atilla_storage", "Opt-in FATFS mount starting (writes only in explicit pilot mode)");
     experimental::ReadOnlyFatFs fatfs(sd);
     if (!fatfs.mount()) {
       ESP_LOGW("atilla_storage", "FATFS MOUNT FAILED; no filesystem modifications attempted");
@@ -340,7 +347,13 @@ class AtillaStorage : public Component {
     ESP_LOGI("atilla_storage", "FATFS READ-ONLY MOUNT PASS");
     // CRASH ISOLATION: the previous on-device run disconnected immediately
     // after FATFS mount PASS. Never attempt f_open/f_read without explicit opt-in.
-    if (cache_write_pilot_) {
+    if (https_cache_pilot_) {
+      const bool ok = fatfs.store_cache_png_once(
+          graphics_fetch::kCacheSlot, verified_download.bytes.get(),
+          verified_download.size, graphics_fetch::kExpectedCrc32);
+      ESP_LOGI("atilla_storage", "HTTPS CACHE COMBINED %s download=PASS card=%s",
+               ok ? "PASS" : "FAIL", ok ? "PASS" : "FAIL");
+    } else if (cache_write_pilot_) {
       // Explicit opt-in; never included in a read-only mode by accident.
       const bool ok = fatfs.run_cache_write_pilot();
       ESP_LOGI("atilla_storage", "CACHE WRITE PILOT OVERALL %s", ok ? "PASS" : "FAIL");
@@ -428,6 +441,7 @@ class AtillaStorage : public Component {
   bool combined_readonly_probe_{false};
   bool manifest_readonly_probe_{false};
   bool cache_write_pilot_{false};
+  bool https_cache_pilot_{false};
   bool fatfs_write_roundtrip_test_{false};
   bool storage_service_test_{false};
   bool storage_repeat_test_{false};
