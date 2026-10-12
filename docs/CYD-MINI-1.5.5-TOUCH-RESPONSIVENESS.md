@@ -21,4 +21,4 @@ Based on the **device-proven 1.5.4 CYD firmware** (ESP32 rev 3.1, ESPHome 2026.9
 
 Public/private YAML artifacts: `atilla-mini-neo-1.5.5-touch-responsive-{public,private}.yaml`, downloadable in the conversation. **YAML structure was parsed and static checks were run; full ESPHome C++ compilation and hardware test have NOT been performed.** This is an experimental FreeRTOS/TLS change. Keep 1.5.4 as the working rollback.
 
-Only this development note has been committed to the repo; the complete 1.5.5 source is delivered in the YAML artifacts, not yet committed as a GitHub source file. Do not commit the private artifact or its credentials. The 7-inch Waveshare project and SD contents were not modified.
+The complete **credential-free 1.5.5 YAML** is committed at `experimental/atilla-mini/atilla-mini-1.5.5-touch-responsive.yaml`; the private configured artifact stays downloadable only in the chat. Do not commit the private artifact or its credentials. The 7-inch Waveshare project and SD contents were not modified.
