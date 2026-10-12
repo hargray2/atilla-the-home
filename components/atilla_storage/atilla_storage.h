@@ -452,7 +452,8 @@ class AtillaStorage : public Component {
       ESP_LOGI("atilla_storage", "FATFS unmounted");
     else
       ESP_LOGE("atilla_storage", "FATFS unmount FAILED; cache handoff blocked");
-    if (cache_read_pilot_ && unmount_ok && verified_cache_png.data) {
+    if (cache_image::handoff_ready(cache_read_pilot_, unmount_ok,
+                                   bool(verified_cache_png.data))) {
       // Transfer is explicitly one-way, and publication occurs only AFTER
       // successful f_unmount: no live FATFS handle escapes the worker.
       auto *handoff = new (std::nothrow) experimental::ReadOnlyFatFs::CachedPng(
