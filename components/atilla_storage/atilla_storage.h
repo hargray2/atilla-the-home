@@ -197,8 +197,10 @@ class AtillaStorage : public Component {
  public:
   // A private full-panel lambda may render a *copied/decoded* image on the
   // ESPHome/LVGL main loop. The borrowed compressed PNG is freed on return.
-  using CachePreviewCallback = bool (*)(const uint8_t *, uint32_t, uint16_t, uint16_t);
-  void set_cache_preview_callback(CachePreviewCallback callback) {
+  using CachePreviewCallback = bool (*)(void *, const uint8_t *, uint32_t,
+                                        uint16_t, uint16_t);
+  void set_cache_preview_callback(void *context, CachePreviewCallback callback) {
+    cache_preview_context_ = context;
     cache_preview_callback_ = callback;
   }
   void set_devices(spi_device::SPIDeviceComponent *card, spi_device::SPIDeviceComponent *idle) {
@@ -245,7 +247,7 @@ class AtillaStorage : public Component {
                               verified.crc32 == 0xF60D2E27U &&
                               verified.width == 1 && verified.height == 1;
           const bool displayed = pinned && cache_preview_callback_ != nullptr &&
-              cache_preview_callback_(ready->data.get(), verified.bytes,
+              cache_preview_callback_(cache_preview_context_, ready->data.get(), verified.bytes,
                                       verified.width, verified.height);
           ESP_LOGI("atilla_storage",
                    "CACHE SCREEN MAIN-LOOP %s slot=2 bytes=%" PRIu32
@@ -516,6 +518,7 @@ class AtillaStorage : public Component {
   bool https_cache_pilot_{false};
   bool cache_read_pilot_{false};
   bool cache_screen_pilot_{false};
+  void *cache_preview_context_{nullptr};
   CachePreviewCallback cache_preview_callback_{nullptr};
   std::atomic<experimental::ReadOnlyFatFs::CachedPng *> cache_png_pending_{nullptr};
   bool fatfs_write_roundtrip_test_{false};
