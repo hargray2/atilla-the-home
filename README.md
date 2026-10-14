@@ -1,49 +1,68 @@
-# ATILLA THE HOME
+# ATILLA — ESP Development Ecosystem
 
-ESPHome + LVGL dashboard for the **Waveshare ESP32-S3-Touch-LCD-7 Rev 1.2** (800 × 480, GT911 touch, 8 MB PSRAM, microSD).
+**ATILLA is an open, evolving ecosystem for ESP-based smart devices and the automated tools used to build, test, flash, and maintain them.** It is **not just a Waveshare display project**. The three current projects are ATILLA-LAB, the Waveshare 7-inch display, and ATILLA Mini (Cheap Yellow Display / CYD).
 
-## Current project checkpoint
+The ecosystem combines local ESPHome development, Home Assistant integration, hardware testing, weather/radar interfaces and a growing toolkit for Tuya MCU bridges and retrofitted smart appliances. Each project has its own source, hardware constraints, testing evidence and release process.
 
-**ATILLA 4.7.9y — latest documented hardware-accepted checkpoint on this branch (2026-10-11).** Hardware logs show weather and forecast retrieval, CARTO and RainViewer display, and a combined read-only SD asset discovery/CRC/known-file verification. These tests do not establish trustworthy asset authenticity, arbitrary asset rendering, or filesystem write safety. The complete running firmware remains private.
+## The three current ATILLA projects
 
-This public repository contains **custom external components, tests, and engineering documentation**. The authoritative complete firmware is a **private, single `waveshare.yaml`**, supplied as a complete .txt/YAML file for ESPHome Builder. **Do not commit the complete private YAML or API keys here.** `main` is not the current hardware-validated firmware baseline.
+### 1. ATILLA-LAB — Automated ESP development server
 
-## Ecosystem
+**The engineering environment behind the ecosystem.** A Debian-based development server on a Dell Latitude E6420 that is being built to work with ATILLA **and other ESPHome projects**.
 
-ATILLA is three separately documented components: [Waveshare 7-inch](docs/ecosystem/WAVESHARE-7-INCH.md), [ATILLA Mini](docs/ecosystem/ATILLA-MINI.md), and the independent [ATILLA-LAB development server](docs/ecosystem/ATILLA-LAB.md). Start at the [ecosystem index](docs/ecosystem/README.md); the lab also serves unrelated ESPHome, Tuya MCU and retrofitted appliance projects. The server and Home Assistant workflow have different test/deployment status from the display firmware.
+- Locally validates, compiles and qualifies ESPHome firmware; keeps normal builds off paid AI APIs.
+- Manages registered boards, hardware identities, backups, source revisions, build artifacts and persistent jobs.
+- Provides controlled, allowlisted, job-specific flashing infrastructure, with post-flash verification and recovery automation under development. **Fully autonomous flashing and erasing are not yet hardware-approved.**
+- Provides an authenticated localhost management dashboard and a read-only Home Assistant discovery/dashboard-design workflow. Live discovery of 800+ entities and local Lovelace JSON export have been demonstrated.
+- Is being extended for Tuya MCU UART devices, appliance retrofits, serial/camera-assisted tests, and future toolchains.
 
-## Start here
+**[ATILLA-LAB documentation](docs/ecosystem/ATILLA-LAB.md)** · [Integration boundaries](docs/ecosystem/INTEGRATION.md)
 
-- [Latest documented Waveshare hardware checkpoint, 4.7.9y](docs/VALIDATED-BASELINE-4.7.9y.md)
+### 2. ATILLA Waveshare 7-inch — Touchscreen home dashboard
 
-- [Repository structure and component responsibilities](docs/CURRENT-ARCHITECTURE.md)
-- [Earlier 4.7.9u hardware acceptance](docs/VALIDATED-BASELINE-4.7.9u.md)
-- [Previous 4.7.9t hardware acceptance](docs/VALIDATED-BASELINE-4.7.9t.md)
-- [Development, release and rollback workflow](docs/RELEASE-WORKFLOW.md)
-- [CI test strategy](docs/AUTOMATED-TESTS.md)
-- [Repository readiness checklist](docs/REPOSITORY-CHECKLIST.md)
-- [External component inventory](docs/COMPONENT-INVENTORY.md)
-- [Next-stage microSD asset roadmap](docs/SD-ASSET-ROADMAP.md)
-- [Hardware and pinout](docs/HARDWARE.md)
-- [Security and contribution guidance](docs/SECURITY-AND-CONTRIBUTING.md)
+An ESPHome/LVGL smart-home and weather/radar dashboard on the **Waveshare ESP32-S3-Touch-LCD-7 Rev 1.2**, with an 800 × 480 RGB display, GT911 touch, PSRAM and microSD.
 
-## Source layout
+- Weather and forecasts, CARTO basemap imagery and RainViewer radar.
+- Custom read-only SD/FatFs diagnostics and asset experiments.
+- Latest **documented** Waveshare hardware checkpoint on the inspected development branch: **4.7.9y**, with weather/radar/display and combined read-only file checks.
+- The complete authoritative `waveshare.yaml` is **private**, not included here; public external components and test fixtures are not a reproducible full panel build.
+
+**[Waveshare project documentation](docs/ecosystem/WAVESHARE-7-INCH.md)** · [Hardware acceptance 4.7.9y](docs/VALIDATED-BASELINE-4.7.9y.md) · [Wiring and hardware](docs/HARDWARE.md)
+
+### 3. ATILLA Mini — Cheap Yellow Display (CYD)
+
+A separate compact ESP32 touchscreen running its own ESPHome firmware, designed as a smaller ATILLA interface and experimental instrument/display platform.
+
+- Source: [ATILLA Mini ESPHome project](experimental/atilla-mini/).
+- Hardware acceptance for 1.5.7 documents background weather retrieval, anti-retention dimming and backlight-off idle behavior.
+- Developed and built through ATILLA-LAB without modifying Waveshare firmware.
+- Some Mini touch-wake and SD-card test cases remain unverified; build success is not the same as complete hardware acceptance.
+
+**[Mini project documentation](docs/ecosystem/ATILLA-MINI.md)** · [Mini 1.5.7 acceptance](docs/CYD-MINI-1.5.7-HARDWARE-ACCEPTANCE.md)
+
+## Repository layout
+
+This public repository currently contains more **device firmware components and history** than ATILLA-LAB server source. The lab is maintained in a separate Dell checkout; it must not be treated as already published in this repo.
 
 ```text
-components/
-  atilla_storage/          ESPHome component + FatFs read-only transport
-  atilla_radar_filter/     RainViewer precipitation palette adapter
-docs/                      Current and historical engineering notes
-tests/                     ESPHome/SD diagnostic smoke configurations
-.github/workflows/         Automated validation experiments
-experimental/              Non-production diagnostics and prototypes
+components/                  Public Waveshare external components
+experimental/atilla-mini/    ATILLA Mini firmware and experiments
+tests/                       Component and firmware smoke fixtures
+release/                     Component lockfile and release references
+docs/ecosystem/              Three-project ecosystem entry points
+docs/                        Historical technical reports and acceptance evidence
+.github/workflows/           Automated validation experiments
 ```
 
-**Not yet checked into this repository:** the private firmware YAML, the in-YAML weather/CARTO/radar worker implementations, SD-loaded dashboard assets, or a reproducible full firmware build. Do not imply that `tests/fatfs-smoke.yaml` tests the full device.
+**[Explore the ecosystem docs](docs/ecosystem/README.md)** · [Build and release workflow](docs/RELEASE-WORKFLOW.md) · [Repository checklist](docs/REPOSITORY-CHECKLIST.md) · [Security guidance](docs/SECURITY-AND-CONTRIBUTING.md)
 
-## Component versioning
+## Engineering principles
 
-The earlier 4.7.9t firmware references `dev/sd-batch-worker-479q` for `atilla_storage` and `dev/radar-intensity` for the radar filter. The storage branch contains the 24 KB worker routing verified on hardware. Prefer **immutable commit references** for future production releases once the integration has been audited; `refresh: 0s` does not make a mutable branch immutable.
+- Keep each physical device's firmware, documentation, acceptance tests and rollback independent.
+- Never publish private full-firmware YAML, Wi-Fi credentials, tokens, Home Assistant secrets, private device backups or location information.
+- Validate and build locally; require verified device identity, project-specific authorization and recovery readiness before hardware writes.
+- Treat UI screenshots, successful compilation, successful OTA and verified physical behavior as **different levels of evidence**.
+- Keep unsafe appliance-control experiments and SD writes behind explicit hardware-specific safeguards.
 
 ## Support ATILLA development
 
@@ -58,12 +77,4 @@ ATILLA is a hobbyist ecosystem developed and tested with real ESP hardware. If i
 
 Please verify the recipient within your payment app before sending money. These are personal voluntary-support methods, not purchases or a promise of support/services.
 
-## Operating rules
-
-1. Preserve the hardware-validated 4.7.9t private firmware as rollback; don't refactor it and storage internals simultaneously.
-2. Never publish access tokens, CARTO keys, Wi-Fi data, Home Assistant secrets or private coordinates.
-3. No automatic SD formatting. Read-only behavior by default; any future writes require a separate explicit design, test and recovery plan.
-4. Keep LVGL mutations on the ESPHome main loop; network, filesystem and intensive operations run on appropriate workers.
-5. Every hardware acceptance claim must be supported by boot logs; distinguish YAML parse, ESPHome validation, compile, OTA and hardware runtime tests.
-
-This branch reorganizes documentation and release discipline only. It **does not change the running device firmware**.
+*This branch updates the ecosystem documentation and project presentation; it does not change deployed firmware or the running development server.*
