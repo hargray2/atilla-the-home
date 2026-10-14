@@ -50,7 +50,11 @@ The earlier 4.7.9t firmware references `dev/sd-batch-worker-479q` for `atilla_st
 ATILLA is a hobbyist ecosystem developed and tested with real ESP hardware. If it has been useful to you, voluntary donations help cover development boards, displays, test equipment and ongoing project work. Donations are appreciated but are not required to use the publicly available materials.
 
 - **Cash App:** [Donate via Cash App](https://cash.app/$danielkharvey) (`$danielkharvey`)
-- **PayPal:** Send to `hargray2@yahoo.com` using PayPal's **Send** feature. A personalized PayPal.Me URL has not been provided, so no PayPal.Me link is assumed.
+- **PayPal:** [Donate with PayPal](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG) (QR payment link verified against the provided original image), or use `hargray2@yahoo.com` in PayPal's **Send** feature.
+
+[![Scan to support ATILLA with PayPal](assets/paypal-donation-qr.svg)](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG)
+
+*PayPal donation QR (recreated as a scannable vector code for the same verified destination).*
 
 Please verify the recipient within your payment app before sending money. These are personal voluntary-support methods, not purchases or a promise of support/services.
 
