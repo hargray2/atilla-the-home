@@ -461,7 +461,6 @@ binary_sensor:
     icon: mdi:monitor-check
     lambda: |-
       return !id(mini_screen_sleeping) && !id(mini_screen_saver);
-    update_interval: 1s
 
 output:
   - platform: gpio
