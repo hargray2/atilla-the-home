@@ -1,19 +1,41 @@
-# ATILLA-LAB development server
+# ATILLA-LAB — autonomous ESP engineering station
 
-**Role:** general-purpose local development/test/deployment controller, not a third ESP display and not restricted to ATILLA firmware.
+**Role:** a general-purpose local development and test controller for multiple ESPHome/PlatformIO targets. ATILLA-LAB is **not** another ESP display, and its installed server source is **not** contained in this public firmware repository.
 
-**Host:** Dell Latitude E6420, Debian 13/Xfce, hostname `atilla-lab`; SSH access, persistent `atilla-lab.service`; local-only dashboard at `127.0.0.1:8765` reached through an SSH tunnel. ESPHome, PlatformIO, esptool, camera and registered physical ESP test boards are part of the lab.
+**Host:** Dell Latitude E6420 running Debian 13 with Xfce, hostname `atilla-lab`. The lab has a persistent local control service, authenticated management dashboard, ChatGPT remote connector, ESPHome 2026.9.1, PlatformIO/esptool and V4L2 camera support. Camera capture is configured at **1920 × 1080 MJPEG**.
 
-**Installed acceptance:** Mini validation/build/qualification through dashboard succeeded. The Home Assistant v11 workspace was subsequently installed, found over 800 actual entities using read-only discovery, and produced a downloaded Lovelace JSON dashboard with real IDs.
+## What has actually been tested
 
-**Developed but not necessarily deployed:** subsequent consolidated previews, appliance grouping and hardware-transaction components were offline-tested. Do not describe them as installed without a Dell acceptance run.
+| Capability | Evidence / current boundary |
+|---|---|
+| Remote connector | Authenticated, time-limited access; status, job history, development requests and qualified staged deployment |
+| Server-only updates | Exact source patches qualified, then independently authorized for deployment; service restart and health confirmation were observed |
+| ESPHome validation | A registered ATILLA-Mini target was successfully validated through a native local job on 2026-10-15 |
+| ESPHome compilation | A registered ATILLA-Mini target returned successful native build results and source digest on 2026-10-15; exact YAML filename was **not** included in the remote result |
+| Camera | V4L2 device registered and 1920 × 1080 MJPEG configured; this is not proof of a complete automated visual-acceptance pipeline |
+| Hardware safety | Flashing, erasing and hardware writes remain disabled through the remote connector |
+| Build-result reporting | Returns job status and limited summary; bounded redacted compiler logs and exact config identity are still needed |
 
-**Default safety policy:** $20 monthly local AI allowance, eight AI calls per job, two correction retries; flash/erase denied unless specifically approved for matching device and job; erase needs its own authorization. Local budget accounting does not guarantee a provider-side hard billing cutoff. Hardware writes, especially for mains-powered Tuya appliances, require independent evidence and recovery readiness.
+The existing ChatGPT connector deliberately exposes a limited set of actions; it is **not a general remote shell**. Remote validation/build is currently routed through two exact safe-job requests handled by the existing development endpoint. Server status showing a project and config present should never replace validation of the exact source file chosen for compilation.
 
-## Home Assistant setup experience
+## Registered targets
 
-The intended user workflow is **web-first** at `/ha`: enter Home Assistant LAN IP or full URL, paste a long-lived token into a password field, click **Connect & Discover**, view discovery progress/counts and entities, then generate local dashboard JSON. The token must be stored locally in a `0600` private file, never echoed to the browser after submission, placed in logs, sent to AI prompts or embedded in generated dashboards. HA discovery must use a strict allowlist of read operations; live HA configuration and appliance control must remain disabled. A reconnect/change-token flow and safe failure messages are required. This easy-setup interface is a requested improvement and must not be represented as shipped until installed and tested.
+- **ATILLA-Mini (CYD):** ESPHome target, local source project and physically registered serial identity. Use its own firmware configuration and hardware acceptance history.
+- **ESP12 test board:** PlatformIO placeholder. The checkout and serial identity were not configured at the time of this audit. Do not schedule a physical flash against it.
+- **Future devices:** independent ESPHome builds, Tuya MCU bridge diagnostics and appliance retrofits will need their own identities and authorization.
 
-**Current manual fallback:** `esp_agent.ha_workspace_cli configure` and `sync` with a private token file.
+The **Waveshare 7-inch** has private complete firmware. Do not treat it as equivalent to a public component smoke-test YAML or to the CYD target.
 
-**Long-term scope:** independent project and device registry for arbitrary ESPHome firmware, Tuya MCU bridges, retrofitted smart appliances, and future toolchain adapters; locally executed builds and diagnostics; camera/serial physical acceptance; authenticated remote management.
+## Budget, authorization and safe operations
+
+The lab has a **$20/month internal AI reservation ceiling** (not a provider-side hard billing cap), bounded AI calls and audit records. Reservations may diverge from posted OpenAI API charges; reconciliation requires independently verified monthly costs. Ordinary validation and compilation jobs run locally rather than invoking the AI development worker.
+
+The remote connector uses a timed authorization window, and firmware writes must remain gated by matching device identity, separate explicit approval, backup/recovery readiness and post-write physical verification. No build success, camera image, local source edit, Home Assistant discovery or staged patch automatically permits flashing or erasing.
+
+## Home Assistant and dashboard boundary
+
+The lab has a separate Home Assistant discovery/dashboard-export workspace. Read-only entity discovery and local Lovelace JSON export have previously been demonstrated; they do not imply live Home Assistant configuration edits or appliance control. A requested web-first **Connect & Discover** interface (HA URL/IP, secret token handling, entity preview and JSON export) must be labeled as planned until demonstrated on the installed service. Sensitive tokens must remain in local private storage, not model prompts, logs, public Git history or dashboard JSON.
+
+The installed server lives in a separate Dell checkout at `~/atilla_control_server_v0_3`. An eventual dedicated lab repository should have its own release rules, tests, permissions and secrets policy. Do not copy that checkout into this public firmware-components repository as a shortcut.
+
+**Related:** [ecosystem index](README.md) · [integration rules](INTEGRATION.md) · [Mini firmware](ATILLA-MINI.md) · [repository audit 2026-10-15](../REPOSITORY-AUDIT-2026-10-15.md).
