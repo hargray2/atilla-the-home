@@ -4,6 +4,10 @@
 
 ATILLA is developed on real ESP hardware, with separate source histories, build checks and hardware acceptance for each device. This public repository holds reusable components, development firmware, tests and engineering documentation; some complete device configurations and the local development server are intentionally private or maintained separately.
 
+[![Illustrated overview of the three ATILLA projects: Waveshare 7-inch dashboard, CYD Mini, and Debian ATILLA-LAB](assets/atilla-ecosystem-overview.svg)](docs/ecosystem/README.md)
+
+*Illustration of the ecosystem (not photographs of the actual devices). [Explore the three projects →](docs/ecosystem/README.md)*
+
 ## Explore the projects
 
 | Project | What it does | Start here |
@@ -41,13 +45,21 @@ The public `main` branch contains the Waveshare component code and the latest do
 | Mini | **1.5.7**: versioned source and documented idle-dimming/backlight-off behavior | [Mini acceptance evidence](https://github.com/hargray2/atilla-the-home/blob/dev/cyd-mini-bringup/docs/CYD-MINI-1.5.7-HARDWARE-ACCEPTANCE.md). Some touch-wake/SD cases remain unverified |
 | ATILLA-LAB | Remotely queued `validate` and `build` jobs succeeded for registered Mini target on 2026-10-15 | The remote result did not expose the exact YAML filename. Builds do not imply a flash or complete physical acceptance |
 
-See [release notes](docs/RELEASE-NOTES.md) and the [latest repository audit](https://github.com/hargray2/atilla-the-home/blob/audit/atilla-ecosystem-20261015/docs/REPOSITORY-AUDIT-2026-10-15.md) for engineering history and unresolved issues.
+See [release notes](docs/RELEASE-NOTES.md) and the [current repository status and PR dependency map](docs/REPOSITORY-STATUS.md) for engineering history and unresolved issues.
 
 ## Build and development
 
 This repository contains [documented external components](docs/COMPONENT-INVENTORY.md), [CI smoke fixtures](docs/AUTOMATED-TESTS.md), and [build/troubleshooting guidance](docs/BUILD-AND-TROUBLESHOOTING.md). Use the appropriate board configuration and `secrets.yaml` outside Git, and distinguish **source review → ESPHome validation → compile → authorized deployment → observed hardware behavior**.
 
 This is an active engineering project. Experimental branches and historical tests are preserved intentionally for provenance; a draft pull request is not a production release.
+
+## Support the project
+
+ATILLA is an independent hardware/software project. Voluntary support helps with development boards, displays and test equipment; no donation is needed to read the public material. Please confirm the payment recipient before sending anything.
+
+**[PayPal](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG)** · **[Cash App](https://cash.app/$danielkharvey)**
+
+[![PayPal voluntary-support QR code](assets/paypal-donation-qr.svg)](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG)
 
 ## Safety and contributions
 
