@@ -1,0 +1,28 @@
+name: ATILLA-LAB pinned Mini wake adapter tests
+
+on:
+  pull_request:
+    paths:
+      - 'tools/atilla_lab/pinned_mini_wake_build.py'
+      - 'tests/test_pinned_mini_wake_build.py'
+      - '.github/workflows/lab-pinned-mini-wake.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-safety-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax check
+        run: python -m py_compile tools/atilla_lab/pinned_mini_wake_build.py tests/test_pinned_mini_wake_build.py
+      - name: Pure offline safety tests (all IO mocked)
+        run: python -m unittest discover -s tests -p 'test_pinned_mini_wake_build.py' -v
