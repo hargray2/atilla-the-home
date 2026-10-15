@@ -59,7 +59,7 @@ ATILLA is an independent hardware/software project. Voluntary support helps with
 
 **[PayPal](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG)** · **[Cash App](https://cash.app/$danielkharvey)**
 
-[![PayPal voluntary-support QR code](assets/paypal-donation-qr.svg)](https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG)
+<a href="https://www.paypal.com/qrcodes/p2pqrc/TFBQ3QZKZV8FG"><img src="assets/paypal-donation-qr.svg" width="150" alt="PayPal voluntary support QR code" /></a>
 
 ## Safety and contributions
 
