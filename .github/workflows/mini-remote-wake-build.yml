@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'experimental/atilla-mini/atilla-mini-1.5.7-idle-display.yaml'
+      - 'experimental/atilla-mini/prepare-mini-wake.sh'
       - '.github/workflows/mini-remote-wake-build.yml'
   workflow_dispatch:
 
@@ -19,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -40,12 +42,8 @@ jobs:
               encoding='utf-8'
           )
           PY
-      - name: Validate proposed wake firmware
-        working-directory: experimental/atilla-mini
-        run: esphome config atilla-mini-1.5.7-idle-display.yaml
-      - name: Compile proposed wake firmware (no flash/OTA)
-        working-directory: experimental/atilla-mini
-        run: esphome compile atilla-mini-1.5.7-idle-display.yaml
+      - name: Verify pinned source, validate and compile (no flash/OTA)
+        run: bash experimental/atilla-mini/prepare-mini-wake.sh
       - name: Confirm build did not acquire device-write permissions
         if: always()
         shell: bash
