@@ -1,53 +1,48 @@
-# ATILLA Mini 0.1.0 — CYD first-flash test
+# ATILLA Mini — CYD touchscreen firmware
 
-Branch: `dev/cyd-mini-bringup` only. **No Waveshare code is changed.**
+**ATILLA Mini** is the compact, independent ESP32 touchscreen member of the ATILLA ecosystem. It is not the Waveshare 7-inch firmware, and its board-specific pinout and hardware acceptance do not apply to other ESP devices.
 
-## Candidate configurations
-- `atilla-mini-0.1.0-st7789v.yaml`: first-screen candidate for dual-USB CYD.
-- Display model and touch calibration are **not hardware-confirmed**.
-- This is an ESPHome YAML **source**, not a precompiled .bin. Requires local secrets and ESPHome compilation; compilation has not been verified in this session.
+**Current source in this branch:** `atilla-mini-1.5.7-idle-display.yaml`, a credential-free ESPHome configuration for the ESP32-2432S028 dual-USB CYD. Previous versioned YAML files are preserved as development and regression snapshots—not as interchangeable production firmware.
 
-## Factory backup BEFORE first flash
+## Current entry points
 
-Install esptool on your PC and identify the CYD serial port. Read its flash size first:
+- [Mini project overview and hardware evidence](../../docs/ecosystem/ATILLA-MINI.md)
+- [Version 1.5.7 hardware acceptance](../../docs/CYD-MINI-1.5.7-HARDWARE-ACCEPTANCE.md)
+- [Version 1.5.7 idle-display design](../../docs/CYD-MINI-1.5.7-IDLE-DISPLAY.md)
+- [Mini SD/peripheral research](../../docs/CYD-MINI-SD-ROADMAP.md)
+- [Repo-wide engineering boundaries](../../docs/ecosystem/INTEGRATION.md)
+
+### Firmware snapshots
+
+| Source | Role |
+|---|---|
+| `atilla-mini-0.1.0-st7789v.yaml`, `0.1.1-sntp` | Initial display, touch, and clock bring-up candidates |
+| `0.2.0-neo`, `0.2.1-mipi-spi` | Early NEO display iterations |
+| `0.6.0-instrument-deck` | Instrument-deck experiment |
+| `1.5.2-hardware-pass` | Earlier hardware-acceptance candidate |
+| `1.5.3-asset-vault-preview`, `1.5.4-known-file-crc` | Read-only storage and asset experiments |
+| `1.5.5-touch-responsive`, `1.5.6-touch-latency` | Touch responsiveness tuning |
+| **`1.5.7-idle-display`** | Most recent versioned Mini source in this branch; idle/display-protection changes |
+
+All filenames in this table begin with `atilla-mini-` and end in `.yaml`. The versioned filenames are intentional. Do not assume that a generic `atilla-mini.yaml` exists.
+
+## Validate and compile — no flashing
+
+Run from the repository root with ESPHome 2026.9.1 and a **private**, local `experimental/atilla-mini/secrets.yaml` containing the referenced `!secret` keys:
 
 ```sh
-python -m esptool --port PORT flash_id
+esphome config experimental/atilla-mini/atilla-mini-1.5.7-idle-display.yaml
+esphome compile experimental/atilla-mini/atilla-mini-1.5.7-idle-display.yaml
 ```
 
-For a verified **4 MB** flash chip only:
+These commands compile locally; they do **not** upload firmware to a device. Never commit `secrets.yaml`, tokens, device backups, private network identifiers, or coordinates.
 
-```sh
-python -m esptool --port PORT --baud 115200 read_flash 0x0 0x400000 atilla-mini-factory-4mb.bin
-```
+**ATILLA-LAB status (2026-10-15):** the registered `atilla-mini` target passed remotely queued validation and compilation, with hardware writes disabled. At that time the remote job summary did not expose its exact configuration filename, so that result must not be represented as proof that the repository's 1.5.7 file was the compiled input. Confirm source path and build digest before promoting a release.
 
-Do **not** assume 4 MB if `flash_id` reports another size. Disconnect other serial tools and save the backup somewhere safe. A backup does not guarantee restoration of external calibration/settings.
+## Hardware evidence and unresolved checks
 
-## Secrets
+The 1.5.7 acceptance report documents background weather retrieval, idle dimming, backlight-off behavior, Wi-Fi continuity and uptime. It does **not** establish every first-touch wake path, successful inserted-card CRC, long-running weather polling, or arbitrary SD asset rendering. Distinguish a successful config check, local build, OTA upload and observed physical behavior.
 
-In ESPHome `secrets.yaml` supply these names (do not commit private values):
+The original 0.1.0 first-flash candidate and hardware-recovery notes remain historical context in [Mini bring-up](../../docs/CYD-ATILLA-MINI-BRINGUP.md). Do not use `esphome run`, serial/OTA upload, erase, or reset as part of a routine build. Any hardware write requires the correct board identity, a verified backup, specific authorization and recovery planning.
 
-```yaml
-wifi_ssid: "YOUR_WIFI"
-wifi_password: "YOUR_WIFI_PASSWORD"
-atilla_mini_api_key: "YOUR_32_BYTE_BASE64_API_KEY"
-atilla_mini_ota_password: "YOUR_UNIQUE_OTA_PASSWORD"
-atilla_mini_fallback_password: "YOUR_UNIQUE_AP_PASSWORD_8_OR_MORE_CHARACTERS"
-```
-
-Generate API key with e.g. `openssl rand -base64 32`.
-
-## Build/flash
-Run `esphome config experimental/atilla-mini/atilla-mini-0.1.0-st7789v.yaml` followed by `esphome run experimental/atilla-mini/atilla-mini-0.1.0-st7789v.yaml` from the repository root. Use USB/serial for the initial flash. Do not attempt to flash this device with the Waveshare YAML.
-
-## Record results
-1. Does backlight turn on? Is the title legible, correctly colored, and landscape?
-2. Does touching corners update X/Y? Copy several `atilla_mini_touch` log lines.
-3. Does Home Assistant discover `atilla-mini`? Does the clock appear after pairing?
-4. Record ESPHome version, boot messages, reboot loops, Wi-Fi signal, and uptime.
-5. If panel remains black/white but ESPHome logs and Wi-Fi work, **stop and report**. Try another controller definition after reviewing logs; don't randomly rewire GPIOs.
-
-Note: two independent SPI buses are intentional for this board family. An ESPHome 2026 issue reports touch failures on a shared bus; see https://github.com/esphome/esphome/issues/16879.
-
-## Following gates
-0.1.1 panel controller/orientation and touch calibration, 0.2.x responsive UI and HA entities, 0.3.x compact weather/forecast, later bounded memory tests for static map/radar.
+For 1920 × 1080 camera-assisted acceptance, use ATILLA-LAB's registered camera. Screenshots alone do not prove correct touch or filesystem behavior.
