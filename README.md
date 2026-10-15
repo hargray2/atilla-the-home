@@ -24,7 +24,7 @@ An ESPHome/LVGL smart-home and weather/radar dashboard on the **Waveshare ESP32-
 
 - Weather and forecasts, CARTO basemap imagery and RainViewer radar.
 - Custom read-only SD/FatFs diagnostics and asset experiments.
-- Latest **documented** Waveshare hardware checkpoint on the inspected development branch: **4.7.9y**, with weather/radar/display and combined read-only file checks.
+- The inspected ecosystem-documentation branch carries Waveshare **4.7.9y** hardware evidence; the divergent `main` branch separately documents later **4.7.9z** read-only manifest testing and **4.7.9aa** tightly gated immutable-cache write-pilot testing. Neither is a general SD write service.
 - The complete authoritative `waveshare.yaml` is **private**, not included here; public external components and test fixtures are not a reproducible full panel build.
 
 **[Waveshare project documentation](docs/ecosystem/WAVESHARE-7-INCH.md)** · [Hardware acceptance 4.7.9y](docs/VALIDATED-BASELINE-4.7.9y.md) · [Wiring and hardware](docs/HARDWARE.md)
@@ -39,6 +39,15 @@ A separate compact ESP32 touchscreen running its own ESPHome firmware, designed 
 - Some Mini touch-wake and SD-card test cases remain unverified; build success is not the same as complete hardware acceptance.
 
 **[Mini project documentation](docs/ecosystem/ATILLA-MINI.md)** · [Mini 1.5.7 acceptance](docs/CYD-MINI-1.5.7-HARDWARE-ACCEPTANCE.md)
+
+## Branch and evidence navigation
+
+The default `main` branch and the Mini development branch are **not currently a single merged firmware baseline**. This ecosystem documentation is under review in [PR #14](https://github.com/hargray2/atilla-the-home/pull/14) against `dev/cyd-mini-bringup`; nothing in this document merges branches or upgrades running firmware. For full branch/file findings, review the [October 15 repository audit](docs/REPOSITORY-AUDIT-2026-10-15.md) and the [file-level inventory](docs/FILE-INVENTORY-2026-10-15.md).
+
+- [ATILLA-LAB capabilities and controls](docs/ecosystem/ATILLA-LAB.md)
+- [ATILLA Mini source/version index](experimental/atilla-mini/README.md)
+- [Waveshare hardware checkpoints and code boundaries](docs/ecosystem/WAVESHARE-7-INCH.md)
+- [Integration and project ownership](docs/ecosystem/INTEGRATION.md)
 
 ## Repository layout
 
