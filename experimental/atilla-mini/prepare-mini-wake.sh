@@ -15,6 +15,10 @@ CANDIDATE="$TARGET_DIR/$CANDIDATE_NAME"
 LOG_DIR="${ATILLA_WAKE_LOG_DIR:-$HOME/.cache/atilla-lab/mini-wake}"
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
+# Do not overwrite the registered target's normal .esphome/build/atilla-mini cache.
+export ESPHOME_BUILD_PATH="$LOG_DIR/build"
+mkdir -p "$ESPHOME_BUILD_PATH"
+chmod 700 "$ESPHOME_BUILD_PATH"
 
 if ! git -C "$REPO_ROOT" cat-file -e "$PIN_COMMIT^{commit}" 2>/dev/null; then
   echo "Pinned source commit is absent: fetching the wake proposal branch." >&2
