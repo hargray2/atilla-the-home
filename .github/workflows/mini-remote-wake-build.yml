@@ -1,0 +1,54 @@
+name: ATILLA Mini remote-wake build
+
+on:
+  pull_request:
+    paths:
+      - 'experimental/atilla-mini/atilla-mini-1.5.7-idle-display.yaml'
+      - '.github/workflows/mini-remote-wake-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-compile:
+    name: Validate and compile (no device access)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned ESPHome version
+        run: python -m pip install 'esphome==2026.9.1'
+      - name: Create disposable CI secrets (never use real HA/Wi-Fi credentials)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64
+          from pathlib import Path
+          demo_api_key = base64.b64encode(bytes(range(32))).decode('ascii')
+          secrets_file = Path('experimental/atilla-mini/secrets.yaml')
+          secrets_file.write_text(
+              f'atilla_mini_api_key: "{demo_api_key}"\n'
+              'wifi_ssid: "ATILLA-CI-NO-NETWORK"\n'
+              'wifi_password: "atilla-ci-not-a-real-password"\n'
+              'atilla_mini_fallback_password: "atilla-ci-placeholder"\n',
+              encoding='utf-8'
+          )
+          PY
+      - name: Validate proposed wake firmware
+        working-directory: experimental/atilla-mini
+        run: esphome config atilla-mini-1.5.7-idle-display.yaml
+      - name: Compile proposed wake firmware (no flash/OTA)
+        working-directory: experimental/atilla-mini
+        run: esphome compile atilla-mini-1.5.7-idle-display.yaml
+      - name: Confirm build did not acquire device-write permissions
+        if: always()
+        shell: bash
+        run: |
+          echo 'CI invokes only ESPHome config and compile.'
+          echo 'No flash, erase, upload, run, or OTA operation is part of this workflow.'
