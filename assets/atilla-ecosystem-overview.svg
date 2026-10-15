@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="404" viewBox="0 0 1200 404" role="img" aria-labelledby="title desc">
+<title id="title">ATILLA ecosystem — three independent connected projects</title>
+<desc id="desc">Illustrated overview of the Waveshare seven-inch home dashboard, ATILLA Mini CYD touchscreen, and ATILLA-LAB Debian development station. This is a diagram, not a photograph.</desc>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1730"/><stop offset="1" stop-color="#111e37"/></linearGradient>
+<linearGradient id="panel" x1="0" x2="1"><stop stop-color="#163b75"/><stop offset="1" stop-color="#127b9a"/></linearGradient>
+<linearGradient id="mini" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#164a78"/><stop offset="1" stop-color="#0da3a4"/></linearGradient>
+</defs>
+<rect width="1200" height="404" rx="22" fill="url(#bg)"/>
+<text x="40" y="48" fill="#eff8ff" font-family="Arial,Helvetica,sans-serif" font-weight="bold" font-size="25">ATILLA</text>
+<text x="160" y="48" fill="#9bcfe0" font-family="Arial,Helvetica,sans-serif" font-size="17">ESP smart-home + autonomous development ecosystem</text>
+<g font-family="Arial,Helvetica,sans-serif">
+<rect x="28" y="72" width="366" height="306" rx="17" fill="#152843" stroke="#375773" stroke-width="2"/>
+<rect x="417" y="72" width="366" height="306" rx="17" fill="#152843" stroke="#375773" stroke-width="2"/>
+<rect x="806" y="72" width="366" height="306" rx="17" fill="#152843" stroke="#375773" stroke-width="2"/>
+<!-- 7-inch panel -->
+<rect x="84" y="107" width="250" height="155" rx="12" fill="#090e19" stroke="#71889e" stroke-width="7"/>
+<rect x="97" y="119" width="224" height="129" rx="3" fill="url(#panel)"/>
+<rect x="108" y="132" width="72" height="53" rx="7" fill="#113258" opacity=".8"/>
+<circle cx="145" cy="157" r="12" fill="#fcd467"/>
+<path d="M137 169h35a11 11 0 0 0-3-20 13 13 0 0 0-24 5 8 8 0 0 0-8 15" fill="#d9eff8"/>
+<rect x="197" y="133" width="113" height="53" rx="7" fill="#0f335c"/>
+<path d="M206 170l16-7 12-12 14 6 10-13 21 9 23-11" fill="none" stroke="#80e1ff" stroke-width="3"/>
+<rect x="108" y="198" width="92" height="37" rx="5" fill="#113258"/>
+<rect x="207" y="198" width="103" height="37" rx="5" fill="#113258"/>
+<path d="M211 227c8-15 15-5 23-15s12 7 23 0 14-8 20-1 16-12 27 6" fill="none" stroke="#76e3bd" stroke-width="3"/>
+<rect x="191" y="262" width="36" height="10" rx="3" fill="#677f92"/>
+<text x="211" y="300" text-anchor="middle" fill="#f5faff" font-size="20" font-weight="bold">Waveshare 7-inch</text>
+<text x="211" y="325" text-anchor="middle" fill="#a9c4d8" font-size="14">Weather · Maps · Radar</text>
+<text x="211" y="347" text-anchor="middle" fill="#75d0ef" font-size="13">ESP32-S3 / LVGL</text>
+<!-- Mini device -->
+<rect x="543" y="99" width="112" height="168" rx="9" fill="#edb63a" stroke="#ffd375" stroke-width="3"/>
+<circle cx="553" cy="110" r="4" fill="#75551e"/><circle cx="645" cy="110" r="4" fill="#75551e"/>
+<circle cx="553" cy="257" r="4" fill="#75551e"/><circle cx="645" cy="257" r="4" fill="#75551e"/>
+<rect x="554" y="112" width="90" height="135" rx="4" fill="#071a2d" stroke="#394d64" stroke-width="3"/>
+<rect x="562" y="122" width="74" height="116" rx="3" fill="url(#mini)"/>
+<text x="599" y="145" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">ATILLA</text>
+<circle cx="599" cy="170" r="14" fill="#ffcf70"/>
+<path d="M585 184h32a11 11 0 0 0-4-18 14 14 0 0 0-25 8 8 8 0 0 0-3 10" fill="#dbf5ff"/>
+<rect x="569" y="205" width="25" height="24" rx="9" fill="#0c3567" stroke="#5dc9f3"/>
+<rect x="604" y="205" width="25" height="24" rx="9" fill="#0c3567" stroke="#5dc9f3"/>
+<text x="600" y="300" text-anchor="middle" fill="#f5faff" font-size="20" font-weight="bold">ATILLA Mini</text>
+<text x="600" y="325" text-anchor="middle" fill="#a9c4d8" font-size="14">CYD touch display</text>
+<text x="600" y="347" text-anchor="middle" fill="#75d0ef" font-size="13">ESP32 / ESPHome</text>
+<!-- LAB laptop -->
+<rect x="875" y="116" width="230" height="132" rx="9" fill="#101923" stroke="#90a6ba" stroke-width="7"/>
+<rect x="887" y="128" width="206" height="108" rx="2" fill="#0b273c"/>
+<text x="902" y="151" fill="#7beac0" font-size="13" font-family="monospace">ATILLA-LAB</text>
+<text x="902" y="176" fill="#effdff" font-size="11" font-family="monospace">&gt; validate: PASS</text>
+<text x="902" y="196" fill="#effdff" font-size="11" font-family="monospace">&gt; compile: PASS</text>
+<text x="902" y="216" fill="#75d0ef" font-size="11" font-family="monospace">&gt; flash: BLOCKED</text>
+<path d="M864 250h254l-20 14H884z" fill="#b2c0ce"/><path d="M916 255h145l8 4H907z" fill="#62788a"/>
+<text x="989" y="300" text-anchor="middle" fill="#f5faff" font-size="20" font-weight="bold">ATILLA-LAB</text>
+<text x="989" y="325" text-anchor="middle" fill="#a9c4d8" font-size="14">Automated build &amp; test</text>
+<text x="989" y="347" text-anchor="middle" fill="#75d0ef" font-size="13">Debian / registered targets</text>
+</g>
+</svg>

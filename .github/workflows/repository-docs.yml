@@ -1,0 +1,34 @@
+name: Repository documentation links
+
+on:
+  pull_request:
+    paths:
+      - '**/*.md'
+      - 'assets/**/*.svg'
+      - 'tools/check_repository_docs.py'
+      - 'tests/test_repository_docs.py'
+      - '.github/workflows/repository-docs.yml'
+  push:
+    paths:
+      - '**/*.md'
+      - 'assets/**/*.svg'
+      - 'tools/check_repository_docs.py'
+      - 'tests/test_repository_docs.py'
+      - '.github/workflows/repository-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  markdown-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test Markdown link checker
+        run: python -m unittest discover -s tests -p 'test_repository_docs.py' -v
+      - name: Validate all repository Markdown references
+        run: python tools/check_repository_docs.py .
