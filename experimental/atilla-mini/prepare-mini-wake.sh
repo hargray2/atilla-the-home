@@ -20,9 +20,11 @@ export ESPHOME_BUILD_PATH="$LOG_DIR/build"
 mkdir -p "$ESPHOME_BUILD_PATH"
 chmod 700 "$ESPHOME_BUILD_PATH"
 
+# Fetch from the verified public upstream URL, NOT the Dell checkout's
+# configurable 'origin' (which can point to a mirror without this branch).
 if ! git -C "$REPO_ROOT" cat-file -e "$PIN_COMMIT^{commit}" 2>/dev/null; then
-  echo "Pinned source commit is absent: fetching the wake proposal branch." >&2
-  git -C "$REPO_ROOT" fetch --no-tags origin dev/mini-remote-wake-proposal
+  echo "Pinned source commit is absent: fetching directly from the reviewed GitHub repository." >&2
+  git -C "$REPO_ROOT" fetch --no-tags https://github.com/hargray2/atilla-the-home.git refs/heads/dev/mini-remote-wake-proposal
 fi
 if ! git -C "$REPO_ROOT" cat-file -e "$PIN_COMMIT^{commit}" 2>/dev/null; then
   echo "ERROR: pinned revision unavailable. No candidate generated." >&2
