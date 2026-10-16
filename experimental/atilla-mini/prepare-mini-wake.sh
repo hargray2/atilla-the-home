@@ -39,8 +39,21 @@ if [[ "$BLOB" != "$PIN_BLOB" ]]; then
   echo "ERROR: pinned YAML does not match reviewed Git blob. Stopping." >&2
   exit 1
 fi
-mv -f -- "$TMP" "$CANDIDATE"
-trap - EXIT
+# Preserve any locally modified candidate instead of silently discarding work.
+if [[ -e "$CANDIDATE" || -L "$CANDIDATE" ]]; then
+  if [[ ! -f "$CANDIDATE" || -L "$CANDIDATE" ]]; then
+    echo "ERROR: candidate path is not a regular file. Refusing to replace it." >&2
+    exit 1
+  fi
+  EXISTING_BLOB="$(git -C "$REPO_ROOT" hash-object "$CANDIDATE")"
+  if [[ "$EXISTING_BLOB" != "$PIN_BLOB" ]]; then
+    echo "ERROR: existing candidate differs from pinned source. Refusing to overwrite." >&2
+    exit 1
+  fi
+  echo "Existing candidate matches pinned source; keeping it."
+else
+  mv -- "$TMP" "$CANDIDATE"
+fi
 echo "PINNED SOURCE VERIFIED: $PIN_COMMIT"
 echo "CANDIDATE YAML: $CANDIDATE_NAME"
 sha256sum "$CANDIDATE"
