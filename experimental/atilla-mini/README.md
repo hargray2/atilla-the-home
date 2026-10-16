@@ -43,6 +43,8 @@ These commands compile locally; they do **not** upload firmware to a device. Nev
 
 The [pinned preparation helper](prepare-mini-wake.sh) reads the Mini 1.5.7 YAML from reviewed commit `1d6af8db41cfd379a63391e15642e36675c84e0a` and verifies Git blob `1de37491275d0838a8081053d7f9fa057ce57223` before writing a separately named `atilla-mini-wake-candidate.yaml`. It then attempts local ESPHome configuration validation and compilation. The helper does **not** request flashing, erasing, OTA installation or Home Assistant service actions. It does fetch the branch from GitHub if the pinned commit is absent, so network access is possible.
 
+For a preparation-only check that uses neither ESPHome compilation nor paid ATILLA AI calls, run `bash experimental/atilla-mini/prepare-mini-wake.sh --prepare-only` from a local clone. This verifies the pinned source and prepares the candidate without validation, compilation, or hardware access; it may perform a GitHub fetch if the pinned commit is missing. Omit `--prepare-only` for validation and compilation. An existing modified candidate is never overwritten by either mode.
+
 This is a **source-preparation and build candidate**, not proof of a working touchscreen wake. The helper has not been run or hardware-accepted in the current review. Its `ESPHOME_BUILD_PATH` environment override should not be assumed to isolate all ESPHome build state without verifying the toolchain's effective build path. Before execution on ATILLA-LAB, inspect the working tree, required local secrets, build-cache path and any existing candidate file to avoid overwriting work.
 
 ## Hardware evidence and unresolved checks
