@@ -39,6 +39,14 @@ These commands compile locally; they do **not** upload firmware to a device. Nev
 
 **ATILLA-LAB status (2026-10-15):** the registered `atilla-mini` target passed remotely queued validation and compilation, with hardware writes disabled. At that time the remote job summary did not expose its exact configuration filename, so that result must not be represented as proof that the repository's 1.5.7 file was the compiled input. Confirm source path and build digest before promoting a release.
 
+## Remote-wake candidate preparation (proposal branch only)
+
+The [pinned preparation helper](prepare-mini-wake.sh) reads the Mini 1.5.7 YAML from reviewed commit `1d6af8db41cfd379a63391e15642e36675c84e0a` and verifies Git blob `1de37491275d0838a8081053d7f9fa057ce57223` before writing a separately named `atilla-mini-wake-candidate.yaml`. It then attempts local ESPHome configuration validation and compilation. The helper does **not** request flashing, erasing, OTA installation or Home Assistant service actions. It does fetch the branch from GitHub if the pinned commit is absent, so network access is possible.
+
+For a preparation-only check that uses neither ESPHome compilation nor paid ATILLA AI calls, run `bash experimental/atilla-mini/prepare-mini-wake.sh --prepare-only` from a local clone. This verifies the pinned source and prepares the candidate without validation, compilation, or hardware access; it may perform a GitHub fetch if the pinned commit is missing. Omit `--prepare-only` for validation and compilation. An existing modified candidate is never overwritten by either mode.
+
+This is a **source-preparation and build candidate**, not proof of a working touchscreen wake. The helper has not been run or hardware-accepted in the current review. Its `ESPHOME_BUILD_PATH` environment override should not be assumed to isolate all ESPHome build state without verifying the toolchain's effective build path. Before execution on ATILLA-LAB, inspect the working tree, required local secrets, build-cache path and any existing candidate file to avoid overwriting work.
+
 ## Hardware evidence and unresolved checks
 
 The 1.5.7 acceptance report documents background weather retrieval, idle dimming, backlight-off behavior, Wi-Fi continuity and uptime. It does **not** establish every first-touch wake path, successful inserted-card CRC, long-running weather polling, or arbitrary SD asset rendering. Distinguish a successful config check, local build, OTA upload and observed physical behavior.

@@ -419,6 +419,23 @@ sensor:
     internal: true
 
 button:
+  # Exposed to Home Assistant via the existing encrypted ESPHome API.
+  # Safe to invoke repeatedly; the normal 2-minute idle timeout is unchanged.
+  - platform: template
+    name: "Mini Wake Display"
+    icon: mdi:monitor
+    on_press:
+      - lambda: |-
+          id(mini_last_activity_ms) = millis();
+          id(mini_screen_sleeping) = false;
+          id(mini_screen_saver) = false;
+          id(mini_sleep_black_pending) = false;
+          auto c = id(mini_backlight).turn_on();
+          c.set_brightness(id(mini_dim_level) / 100.0f);
+          c.perform();
+          // The existing interval repaints without blocking the API callback.
+          id(mini_ui_dirty) = true;
+          ESP_LOGI("mini_idle", "Remote display wake requested");
   - platform: template
     name: "Mini Next Page"
     on_press:
@@ -438,6 +455,12 @@ button:
 binary_sensor:
   - platform: status
     name: "Mini API Status"
+  # Firmware state acknowledgement, NOT camera-based visual acceptance.
+  - platform: template
+    name: "Mini Display Awake"
+    icon: mdi:monitor-check
+    lambda: |-
+      return !id(mini_screen_sleeping) && !id(mini_screen_saver);
 
 output:
   - platform: gpio
