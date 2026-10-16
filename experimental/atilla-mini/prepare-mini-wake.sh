@@ -4,6 +4,12 @@
 set -euo pipefail
 umask 077
 
+MODE="${1:-}"
+if [[ "$MODE" != "" && "$MODE" != "--prepare-only" ]]; then
+  echo "Usage: $0 [--prepare-only]" >&2
+  exit 2
+fi
+
 PIN_COMMIT="1d6af8db41cfd379a63391e15642e36675c84e0a"
 PIN_BLOB="1de37491275d0838a8081053d7f9fa057ce57223"
 YAML_REL="experimental/atilla-mini/atilla-mini-1.5.7-idle-display.yaml"
@@ -57,6 +63,10 @@ fi
 echo "PINNED SOURCE VERIFIED: $PIN_COMMIT"
 echo "CANDIDATE YAML: $CANDIDATE_NAME"
 sha256sum "$CANDIDATE"
+if [[ "$MODE" == "--prepare-only" ]]; then
+  echo "PREPARATION PASSED (validation and build intentionally skipped; no device writes)"
+  exit 0
+fi
 
 # Build using the Dell's local toolchain if available; CI uses its pinned ESPHome.
 LAB_PY="$HOME/atilla_control_server_v0_3/.venv/bin/python"
